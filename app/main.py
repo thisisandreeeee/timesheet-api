@@ -1,135 +1,145 @@
-from fastapi import FastAPI, File, Form, HTTPException, Request, Response, UploadFile, status
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+import io
+import logging
 from typing import List, Optional
 
-from app.schemas.pdf import ErrorResponse, OCRRequest, OCRResponse, OCRResult
-from app.services.pdf_service import PDFProcessingError, process_pdf
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
-# Create FastAPI application
+from app.schemas.pdf import (
+    PDFProcessErrorResponse,
+    PDFProcessLLMConfig,
+    PDFProcessResponse,
+)
+from app.services.pdf_service import PDFProcessingError, process_pdf
+from app.services.llm.client import LLMConfig
+from app.services.llm.config import config_manager
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+# Create FastAPI app
 app = FastAPI(
     title="Timesheet API",
-    description="A minimal FastAPI application with a health check endpoint",
+    description="API for processing timesheet data",
     version="0.1.0",
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
-class HealthResponse(BaseModel):
-    status: str
+# Health check endpoint
+@app.get("/health")
+async def health_check():
+    """Health check endpoint."""
+    return {"status": "healthy"}
 
 
-@app.exception_handler(HTTPException)
-async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
-    """Convert HTTPExceptions to a consistent error response format."""
-    return JSONResponse(
-        status_code=exc.status_code,
-        content=ErrorResponse(
-            status="error",
-            message=str(exc.detail),
-            detail=None
-        ).model_dump(),
-    )
-
-
-@app.exception_handler(Exception)
-async def generic_exception_handler(request: Request, exc: Exception) -> JSONResponse:
-    """Handle all unhandled exceptions and return a consistent error response."""
-    return JSONResponse(
-        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-        content=ErrorResponse(
-            status="error",
-            message=f"An unexpected error occurred: {str(exc)}",
-            detail=None
-        ).model_dump(),
-    )
-
-
-@app.get("/health", response_model=HealthResponse, status_code=status.HTTP_200_OK)
-async def health_check() -> HealthResponse:
-    """
-    Health check endpoint to verify the service is running.
-    """
-    return HealthResponse(status="ok")
-
-
+# PDF processing endpoint
 @app.post(
     "/ocr/pdf",
-    response_model=OCRResponse,
+    response_model=PDFProcessResponse,
     responses={
-        200: {"model": OCRResponse, "description": "Successfully processed PDF"},
-        400: {"model": ErrorResponse, "description": "Invalid input"},
-        415: {"model": ErrorResponse, "description": "Unsupported media type"},
-        422: {"model": ErrorResponse, "description": "Unprocessable entity"},
-        500: {"model": ErrorResponse, "description": "Internal server error"},
+        status.HTTP_400_BAD_REQUEST: {"model": PDFProcessErrorResponse},
+        status.HTTP_422_UNPROCESSABLE_ENTITY: {"model": PDFProcessErrorResponse},
+        status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": PDFProcessErrorResponse},
     },
 )
-async def process_pdf_file(
+async def process_pdf_route(
     file: UploadFile = File(..., description="PDF file to process"),
-    extract_keys: Optional[List[str]] = Form(None, description="List of keys to extract from the document")
-) -> OCRResponse:
+    extract_keys: Optional[List[str]] = Form(None, description="List of keys to extract"),
+    custom_prompt: Optional[str] = Form(None, description="Custom prompt for the LLM"),
+    llm_config_data: Optional[str] = Form(None, description="JSON string with LLM configuration"),
+):
     """
-    Process a PDF file: extract text and structured data using OCR from each page.
+    Process a PDF file and extract structured data.
     
-    - **file**: PDF file to be processed
+    - **file**: PDF file to upload
     - **extract_keys**: Optional list of keys to extract from the document
+    - **custom_prompt**: Optional custom prompt for the LLM
+    - **llm_config_data**: Optional JSON string with LLM configuration
     
-    Returns a list of OCR results with structured data, one for each page in the PDF.
+    Returns a JSON response with OCR results for each page.
     """
-    # Validate file content type
-    if not file.content_type or "application/pdf" not in file.content_type:
-        raise HTTPException(
-            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
-            detail=f"File must be a PDF. Received: {file.content_type}",
-        )
-    
     try:
-        # Process the PDF file
-        contents = await file.read()
-        
-        # Process using our service, passing the extract_keys
-        results = process_pdf(file.file, extract_keys)
-        
-        # Create OCR results
-        ocr_results = [
-            OCRResult(
-                page_number=result["page_number"],
-                text=result.get("text"),
-                confidence=result["confidence"],
-                data=result.get("data", {})
+        # Validate file content type
+        if file.content_type != "application/pdf":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="File must be a PDF",
             )
-            for result in results
-        ]
         
-        # Return the response
-        return OCRResponse(
-            status="success",
-            message="PDF processed successfully",
-            pages_processed=len(ocr_results),
-            results=ocr_results
+        # Parse LLM configuration if provided
+        custom_llm_config = None
+        if llm_config_data:
+            try:
+                import json
+                config_dict = json.loads(llm_config_data)
+                llm_config_model = PDFProcessLLMConfig(**config_dict)
+                custom_llm_config = llm_config_model.to_llm_config()
+            except Exception as e:
+                logger.error(f"Error parsing LLM config: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid LLM configuration: {str(e)}",
+                )
+        
+        # If custom LLM config is provided, temporarily register it for this request
+        route_path = "/ocr/pdf"
+        if custom_llm_config:
+            # Backup the existing config
+            original_config = config_manager.get_config(route_path)
+            # Register the custom config
+            config_manager.register_route_config(route_path, custom_llm_config)
+        
+        # Read file into memory
+        file_bytes = await file.read()
+        file_obj = io.BytesIO(file_bytes)
+        
+        # Process the PDF
+        results = await process_pdf(
+            file=file_obj,
+            extract_keys=extract_keys,
+            route_path=route_path,
         )
+        
+        # Restore original config if we used a custom one
+        if custom_llm_config:
+            config_manager.register_route_config(route_path, original_config)
+        
+        # Return results
+        return PDFProcessResponse(pages=results)
     
     except PDFProcessingError as e:
-        # Handle PDF processing errors
+        logger.error(f"PDF processing error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except ValidationError as e:
+        logger.error(f"Validation error: {str(e)}")
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=str(e),
         )
-    except Exception as e:
-        # Propagate to the global exception handler
+    except HTTPException:
+        # Re-raise HTTP exceptions
         raise
-    finally:
-        # Make sure to close the file
-        await file.close()
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}",
+        )
 
 
 @app.get("/")
