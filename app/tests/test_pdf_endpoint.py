@@ -1,177 +1,183 @@
 import io
-import os
-from unittest.mock import MagicMock, patch
+import json
+from unittest.mock import AsyncMock, patch
 
 import pytest
-from fastapi import FastAPI, UploadFile, status
 from fastapi.testclient import TestClient
 
 from app.main import app
 from app.services.pdf_service import PDFProcessingError
 
-# Create a new test client for each test
+
 @pytest.fixture
-def client():
-    # This ensures we get a fresh app for each test
-    with TestClient(app) as test_client:
-        yield test_client
-
-
-def create_test_pdf():
-    """Create a simple test PDF as bytes."""
-    # This is a minimal valid PDF file
-    return b"%PDF-1.7\n1 0 obj\n<</Type/Catalog/Pages 2 0 R>>\nendobj\n2 0 obj\n<</Type/Pages/Count 1/Kids[3 0 R]>>\nendobj\n3 0 obj\n<</Type/Page/MediaBox[0 0 595 842]/Parent 2 0 R>>\nendobj\nxref\n0 4\n0000000000 65535 f\n0000000009 00000 n\n0000000056 00000 n\n0000000111 00000 n\ntrailer\n<</Size 4/Root 1 0 R>>\nstartxref\n178\n%%EOF"
+def test_client():
+    """Test client fixture."""
+    return TestClient(app)
 
 
 @pytest.fixture
 def mock_pdf_file():
-    """Fixture for a mock PDF file."""
-    pdf_content = create_test_pdf()
-    return pdf_content
+    """Mock PDF file."""
+    # Create a minimal PDF content
+    content = b"%PDF-1.5\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+    return content
 
 
-class TestPDFEndpoint:
-    """Tests for the PDF processing endpoint."""
+@pytest.mark.asyncio
+async def test_health_check(test_client):
+    """Test health check endpoint."""
+    response = test_client.get("/health")
+    assert response.status_code == 200
+    assert response.json() == {"status": "healthy"}
 
-    def test_process_pdf_success(self, client, mock_pdf_file):
-        """Test successful PDF processing without specifying keys."""
-        with patch("app.services.pdf_service.validate_pdf", return_value=True):
-            with patch("app.services.pdf_service.split_pdf", return_value=[b"page1", b"page2"]):
-                with patch("app.services.pdf_service.perform_ocr") as mock_ocr:
-                    # Set up the mock OCR to return different values for different pages
-                    mock_ocr.side_effect = [
-                        {
-                            "text": "Page 1 text", 
-                            "confidence": "high",
-                            "data": {"title": "Sample Document", "date": "2023-06-15"}
-                        },
-                        {
-                            "text": "Page 2 text", 
-                            "confidence": "medium",
-                            "data": {"total_amount": "1,234.56", "sender": "ABC Company"}
-                        }
-                    ]
 
-                    # Create a test file
-                    files = {"file": ("test.pdf", mock_pdf_file, "application/pdf")}
-                    
-                    # Send request
-                    response = client.post("/ocr/pdf", files=files)
-                    
-                    # Check response
-                    assert response.status_code == 200
-                    data = response.json()
-                    assert data["status"] == "success"
-                    assert data["pages_processed"] == 2
-                    assert len(data["results"]) == 2
-                    
-                    # Check first page results
-                    assert data["results"][0]["page_number"] == 1
-                    assert data["results"][0]["text"] == "Page 1 text"
-                    assert data["results"][0]["confidence"] == "high"
-                    assert "data" in data["results"][0]
-                    assert data["results"][0]["data"]["title"] == "Sample Document"
-                    
-                    # Check second page results
-                    assert data["results"][1]["page_number"] == 2
-                    assert data["results"][1]["text"] == "Page 2 text"
-                    assert data["results"][1]["confidence"] == "medium"
-                    assert "data" in data["results"][1]
-                    assert data["results"][1]["data"]["total_amount"] == "1,234.56"
-
-    def test_process_pdf_with_extract_keys(self, client, mock_pdf_file):
-        """Test PDF processing with specific keys to extract."""
-        with patch("app.services.pdf_service.validate_pdf", return_value=True):
-            with patch("app.services.pdf_service.split_pdf", return_value=[b"page1", b"page2"]):
-                with patch("app.services.pdf_service.perform_ocr") as mock_ocr:
-                    # Set up the mock OCR to return different values for different pages
-                    mock_ocr.side_effect = [
-                        {
-                            "text": "Page 1 text", 
-                            "confidence": "high",
-                            "data": {"field1": "Value 1", "field2": "Value 2"}
-                        },
-                        {
-                            "text": "Page 2 text", 
-                            "confidence": "medium",
-                            "data": {"field1": "Value 3", "field2": "Value 4"}
-                        }
-                    ]
-
-                    # Create a test file and specify extract_keys
-                    files = {"file": ("test.pdf", mock_pdf_file, "application/pdf")}
-                    data = {"extract_keys": ["field1", "field2"]}
-                    
-                    # Send request
-                    response = client.post("/ocr/pdf", files=files, data=data)
-                    
-                    # Check response
-                    assert response.status_code == 200
-                    result = response.json()
-                    assert result["status"] == "success"
-                    assert result["pages_processed"] == 2
-                    assert len(result["results"]) == 2
-                    
-                    # Check data fields are present
-                    assert "data" in result["results"][0]
-                    assert result["results"][0]["data"]["field1"] == "Value 1"
-                    assert result["results"][0]["data"]["field2"] == "Value 2"
-                    assert "data" in result["results"][1]
-                    assert result["results"][1]["data"]["field1"] == "Value 3"
-                    assert result["results"][1]["data"]["field2"] == "Value 4"
-
-                    # Verify perform_ocr was called with the extract_keys
-                    mock_ocr.assert_any_call(b"page1", ["field1", "field2"])
-                    mock_ocr.assert_any_call(b"page2", ["field1", "field2"])
-
-    def test_process_pdf_invalid_file_type(self, client):
-        """Test with an invalid file type."""
-        # Create a text file instead of a PDF
-        files = {"file": ("test.txt", b"This is not a PDF", "text/plain")}
+@pytest.mark.asyncio
+async def test_process_pdf_success(test_client, mock_pdf_file):
+    """Test successful PDF processing endpoint."""
+    # Mock the process_pdf function
+    with patch("app.main.process_pdf") as mock_process:
+        # Configure the mock to return sample results
+        mock_process.return_value = [
+            {
+                "page_number": 1,
+                "text": "Sample text from page 1",
+                "confidence": "high",
+                "data": {"title": "Sample Document", "date": "2023-01-01"}
+            },
+            {
+                "page_number": 2,
+                "text": "Sample text from page 2",
+                "confidence": "high",
+                "data": {"author": "John Doe", "pages": "2"}
+            }
+        ]
         
-        # Send request
-        response = client.post("/ocr/pdf", files=files)
+        # Create the file for upload
+        test_file = io.BytesIO(mock_pdf_file)
+        test_file.name = "test.pdf"
+        
+        # Make the request
+        response = test_client.post(
+            "/ocr/pdf",
+            files={"file": ("test.pdf", test_file, "application/pdf")},
+            data={"extract_keys": "title,date,author"}
+        )
         
         # Check response
-        assert response.status_code == 415
+        assert response.status_code == 200
         data = response.json()
-        assert data["status"] == "error"
-        assert "must be a PDF" in data["message"]
+        assert "pages" in data
+        assert len(data["pages"]) == 2
+        assert data["pages"][0]["page_number"] == 1
+        assert data["pages"][0]["text"] == "Sample text from page 1"
+        assert data["pages"][0]["data"]["title"] == "Sample Document"
+        assert data["pages"][1]["page_number"] == 2
+        assert data["pages"][1]["data"]["author"] == "John Doe"
 
-    def test_process_pdf_validation_error(self, client, mock_pdf_file):
-        """Test with a file that fails PDF validation."""
-        with patch("app.services.pdf_service.validate_pdf", return_value=False):
-            # Create a test file
-            files = {"file": ("test.pdf", mock_pdf_file, "application/pdf")}
-            
-            # Send request - this should be caught by our validation before reaching the PDF library
-            with patch("app.services.pdf_service.process_pdf", side_effect=PDFProcessingError("Invalid PDF file")):
-                response = client.post("/ocr/pdf", files=files)
-                
-                # Check response
-                assert response.status_code == 422
-                data = response.json()
-                assert data["status"] == "error"
-                assert data["message"] == "Invalid PDF file"
 
-    def test_process_pdf_processing_error(self, client, mock_pdf_file):
-        """Test handling of processing errors."""
-        with patch("app.services.pdf_service.validate_pdf", return_value=True):
-            with patch("app.services.pdf_service.split_pdf", side_effect=PDFProcessingError("Error splitting PDF")):
-                # Create a test file
-                files = {"file": ("test.pdf", mock_pdf_file, "application/pdf")}
-                
-                # Send request
-                response = client.post("/ocr/pdf", files=files)
-                
-                # Check response
-                assert response.status_code == 422
-                data = response.json()
-                assert data["status"] == "error"
-                assert data["message"] == "Error splitting PDF"
+@pytest.mark.asyncio
+async def test_process_pdf_with_llm_config(test_client, mock_pdf_file):
+    """Test PDF processing with custom LLM configuration."""
+    # Mock the process_pdf function
+    with patch("app.main.process_pdf") as mock_process, \
+         patch("app.main.config_manager.get_config") as mock_get_config, \
+         patch("app.main.config_manager.register_route_config") as mock_register_config:
+        
+        # Configure the mock to return sample results
+        mock_process.return_value = [
+            {
+                "page_number": 1,
+                "text": "Sample text with custom LLM",
+                "confidence": "high",
+                "data": {"custom_field": "Custom value"}
+            }
+        ]
+        
+        # Create the file for upload
+        test_file = io.BytesIO(mock_pdf_file)
+        test_file.name = "test.pdf"
+        
+        # Create custom LLM config
+        llm_config = {
+            "provider": "anthropic",
+            "model": "claude-3-opus-20240229",
+            "temperature": 0.2
+        }
+        
+        # Make the request with custom LLM config
+        response = test_client.post(
+            "/ocr/pdf",
+            files={"file": ("test.pdf", test_file, "application/pdf")},
+            data={
+                "extract_keys": "custom_field",
+                "llm_config_data": json.dumps(llm_config)
+            }
+        )
+        
+        # Check response
+        assert response.status_code == 200
+        data = response.json()
+        assert "pages" in data
+        assert len(data["pages"]) == 1
+        assert data["pages"][0]["text"] == "Sample text with custom LLM"
+        assert data["pages"][0]["data"]["custom_field"] == "Custom value"
 
-    # Skipping this test as it's causing issues
-    @pytest.mark.skip(reason="This test is problematic with global exception handling and will be handled separately")
-    def test_process_pdf_unexpected_error(self, client, mock_pdf_file):
-        """Test handling of unexpected errors."""
-        pass
+
+@pytest.mark.asyncio
+async def test_process_pdf_invalid_file_type(test_client):
+    """Test PDF processing with invalid file type."""
+    # Create a non-PDF file
+    test_file = io.BytesIO(b"This is not a PDF")
+    test_file.name = "test.txt"
+    
+    # Make the request
+    response = test_client.post(
+        "/ocr/pdf",
+        files={"file": ("test.txt", test_file, "text/plain")}
+    )
+    
+    # Check response
+    assert response.status_code == 400
+    assert "detail" in response.json()
+    assert "must be a PDF" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_process_pdf_processing_error(test_client, mock_pdf_file):
+    """Test PDF processing with processing error."""
+    # Mock the process_pdf function to raise an error
+    with patch("app.main.process_pdf", side_effect=PDFProcessingError("Test error")):
+        # Create the file for upload
+        test_file = io.BytesIO(mock_pdf_file)
+        test_file.name = "test.pdf"
+        
+        # Make the request
+        response = test_client.post(
+            "/ocr/pdf",
+            files={"file": ("test.pdf", test_file, "application/pdf")}
+        )
+        
+        # Check response
+        assert response.status_code == 400
+        assert "detail" in response.json()
+        assert "Test error" in response.json()["detail"]
+
+
+@pytest.mark.asyncio
+async def test_process_pdf_invalid_llm_config(test_client, mock_pdf_file):
+    """Test PDF processing with invalid LLM configuration."""
+    # Create the file for upload
+    test_file = io.BytesIO(mock_pdf_file)
+    test_file.name = "test.pdf"
+    
+    # Make the request with invalid LLM config
+    response = test_client.post(
+        "/ocr/pdf",
+        files={"file": ("test.pdf", test_file, "application/pdf")},
+        data={"llm_config_data": "this is not valid json"}
+    )
+    
+    # Check response
+    assert response.status_code == 400
+    assert "detail" in response.json()
+    assert "Invalid LLM configuration" in response.json()["detail"]

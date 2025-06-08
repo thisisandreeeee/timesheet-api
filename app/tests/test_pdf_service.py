@@ -1,265 +1,158 @@
 import io
-from unittest.mock import MagicMock, patch
+import unittest
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from PyPDF2 import PdfReader
+from fastapi.testclient import TestClient
 
-from app.services.pdf_service import (PDFProcessingError, perform_ocr, process_pdf,
-                                    split_pdf, validate_pdf)
+from app.main import app
+from app.services.pdf_service import PDFProcessingError, process_pdf, validate_pdf
 
 
-class TestPDFService:
-    """Tests for the PDF service functions."""
+@pytest.fixture
+def test_client():
+    """Test client fixture."""
+    return TestClient(app)
 
-    def test_validate_pdf_valid(self):
-        """Test validation with a valid PDF."""
-        # Create a mock file with a mock PdfReader that returns a non-empty pages attribute
-        mock_file = MagicMock()
-        
-        with patch("app.services.pdf_service.PdfReader") as mock_reader:
-            # Configure the mock to return a reader with 1 page
-            mock_reader.return_value.pages = [MagicMock()]
-            
-            # Call validate_pdf
-            result = validate_pdf(mock_file)
-            
-            # Check result
-            assert result is True
-            
-            # Verify file seek was called twice
-            mock_file.seek.assert_called_with(0)
-            assert mock_file.seek.call_count == 2
 
-    def test_validate_pdf_invalid(self):
-        """Test validation with an invalid PDF."""
-        # Create a mock file
-        mock_file = MagicMock()
-        
-        with patch("app.services.pdf_service.PdfReader") as mock_reader:
-            # Configure the mock to return a reader with empty pages
-            mock_reader.return_value.pages = []
-            
-            # Call validate_pdf
-            result = validate_pdf(mock_file)
-            
-            # Check result
-            assert result is False
+@pytest.fixture
+def mock_pdf_file():
+    """Mock PDF file fixture."""
+    # Create a mock PDF file
+    content = b"%PDF-1.5\n1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+    file = io.BytesIO(content)
+    return file
 
-    def test_validate_pdf_exception(self):
-        """Test validation when an exception occurs."""
-        # Create a mock file
-        mock_file = MagicMock()
-        
-        with patch("app.services.pdf_service.PdfReader", side_effect=Exception("Test error")):
-            # Call validate_pdf and check exception
-            with pytest.raises(PDFProcessingError) as excinfo:
-                validate_pdf(mock_file)
-            
-            # Verify error message
-            assert "Error validating PDF: Test error" in str(excinfo.value)
 
-    def test_split_pdf(self):
-        """Test splitting a PDF into pages."""
-        # Create a mock file
-        mock_file = MagicMock()
+@pytest.mark.asyncio
+async def test_validate_pdf_valid(mock_pdf_file):
+    """Test validate_pdf with a valid PDF."""
+    # This uses the mock PDF file from the fixture
+    with patch("app.services.pdf_service.PdfReader") as mock_reader:
+        # Mock the PdfReader to return valid PDF data
+        mock_instance = MagicMock()
+        mock_instance.pages = [MagicMock()]  # Mock having one page
+        mock_reader.return_value = mock_instance
         
-        with patch("app.services.pdf_service.PdfReader") as mock_reader:
-            # Configure the mock to return a reader with 2 pages
-            mock_reader.return_value.pages = [MagicMock(), MagicMock()]
-            
-            # Create a mock temporary file
-            with patch("tempfile.NamedTemporaryFile") as mock_temp:
-                mock_temp.return_value.__enter__.return_value.name = "temp_file.pdf"
-                
-                # Mock open function
-                with patch("builtins.open", MagicMock()) as mock_open:
-                    # Configure the mock to return a file that reads as different content for each page
-                    mock_file_handle = MagicMock()
-                    mock_open.return_value.__enter__.return_value = mock_file_handle
-                    mock_file_handle.read.side_effect = [b"Page 1", b"Page 2"]
-                    
-                    # Mock os.unlink
-                    with patch("os.unlink") as mock_unlink:
-                        # Call split_pdf
-                        result = split_pdf(mock_file)
-                        
-                        # Check result
-                        assert len(result) == 2
-                        assert result == [b"Page 1", b"Page 2"]
-                        
-                        # Verify temp file was deleted
-                        assert mock_unlink.call_count == 2
+        result = validate_pdf(mock_pdf_file)
+        assert result is True
 
-    def test_split_pdf_exception(self):
-        """Test splitting when an exception occurs."""
-        # Create a mock file
-        mock_file = MagicMock()
-        
-        with patch("app.services.pdf_service.PdfReader", side_effect=Exception("Test error")):
-            # Call split_pdf and check exception
-            with pytest.raises(PDFProcessingError) as excinfo:
-                split_pdf(mock_file)
-            
-            # Verify error message
-            assert "Error splitting PDF: Test error" in str(excinfo.value)
 
-    def test_perform_ocr_no_keys(self):
-        """Test OCR on a page without specifying keys."""
-        # Create a mock page
-        mock_page = b"Test page content"
+@pytest.mark.asyncio
+async def test_validate_pdf_invalid():
+    """Test validate_pdf with an invalid file."""
+    # Create an invalid file
+    invalid_file = io.BytesIO(b"This is not a PDF file")
+    
+    with patch("app.services.pdf_service.PdfReader") as mock_reader:
+        # Mock the PdfReader to raise an exception
+        mock_reader.side_effect = Exception("Invalid PDF")
         
-        # Call perform_ocr
-        result = perform_ocr(mock_page)
-        
-        # Check result structure
-        assert "text" in result
-        assert "confidence" in result
-        assert "data" in result
-        assert isinstance(result["text"], str)
-        assert isinstance(result["confidence"], str)
-        assert isinstance(result["data"], dict)
-        assert len(result["data"]) > 0  # Should have default fields
+        with pytest.raises(PDFProcessingError):
+            validate_pdf(invalid_file)
 
-    def test_perform_ocr_with_keys(self):
-        """Test OCR on a page with specified keys."""
-        # Create a mock page
-        mock_page = b"Test page content"
-        
-        # Define keys to extract
-        extract_keys = ["field1", "field2", "field3"]
-        
-        # Call perform_ocr with keys
-        result = perform_ocr(mock_page, extract_keys)
-        
-        # Check result structure
-        assert "text" in result
-        assert "confidence" in result
-        assert "data" in result
-        assert isinstance(result["data"], dict)
-        
-        # Check that all requested keys are present
-        for key in extract_keys:
-            assert key in result["data"]
-            assert result["data"][key] is not None
 
-    # Skipping this test as it's causing issues
-    @pytest.mark.skip(reason="This test is problematic with patching and will be handled separately")
-    def test_perform_ocr_exception(self):
-        """Test OCR when an exception occurs."""
-        pass
+@pytest.mark.asyncio
+async def test_process_pdf_success(mock_pdf_file):
+    """Test successful PDF processing."""
+    # Mock the necessary functions
+    with patch("app.services.pdf_service.validate_pdf") as mock_validate, \
+         patch("app.services.pdf_service.split_pdf") as mock_split, \
+         patch("app.services.llm.ocr_service.default_ocr_service.process_document") as mock_ocr:
+        
+        # Configure mocks
+        mock_validate.return_value = True
+        mock_split.return_value = [b"page1", b"page2"]
+        
+        # Mock the OCR result
+        mock_ocr_result = [
+            {
+                "page_number": 1,
+                "text": "Sample text from page 1",
+                "confidence": "high",
+                "data": {"title": "Sample Document", "date": "2023-01-01"}
+            },
+            {
+                "page_number": 2,
+                "text": "Sample text from page 2",
+                "confidence": "high",
+                "data": {"author": "John Doe", "pages": "2"}
+            }
+        ]
+        mock_ocr.return_value = mock_ocr_result
+        
+        # Call the function
+        result = await process_pdf(mock_pdf_file, ["title", "date", "author"])
+        
+        # Verify the result
+        assert len(result) == 2
+        assert result[0]["page_number"] == 1
+        assert result[0]["text"] == "Sample text from page 1"
+        assert result[0]["data"]["title"] == "Sample Document"
+        assert result[1]["page_number"] == 2
+        assert result[1]["data"]["author"] == "John Doe"
+        
+        # Verify the function calls
+        mock_validate.assert_called_once_with(mock_pdf_file)
+        mock_split.assert_called_once_with(mock_pdf_file)
+        mock_ocr.assert_called_once_with(
+            pdf_pages=[b"page1", b"page2"],
+            extract_keys=["title", "date", "author"],
+            route_path="/ocr/pdf"
+        )
 
-    def test_process_pdf_success_no_keys(self):
-        """Test successful processing of a PDF without specific keys."""
-        # Create a mock file
-        mock_file = MagicMock()
-        
-        # Mock validate_pdf to return True
-        with patch("app.services.pdf_service.validate_pdf", return_value=True):
-            # Mock split_pdf to return two pages
-            with patch("app.services.pdf_service.split_pdf", return_value=[b"page1", b"page2"]):
-                # Mock perform_ocr to return different results for each page
-                with patch("app.services.pdf_service.perform_ocr") as mock_ocr:
-                    mock_ocr.side_effect = [
-                        {
-                            "text": "Page 1 text", 
-                            "confidence": "high",
-                            "data": {"title": "Sample Document", "date": "2023-06-15"}
-                        },
-                        {
-                            "text": "Page 2 text", 
-                            "confidence": "medium",
-                            "data": {"total_amount": "1,234.56", "sender": "ABC Company"}
-                        }
-                    ]
-                    
-                    # Call process_pdf without keys
-                    result = process_pdf(mock_file)
-                    
-                    # Check result
-                    assert len(result) == 2
-                    assert result[0]["page_number"] == 1
-                    assert result[0]["text"] == "Page 1 text"
-                    assert result[0]["confidence"] == "high"
-                    assert "data" in result[0]
-                    assert result[0]["data"]["title"] == "Sample Document"
-                    assert result[1]["page_number"] == 2
-                    assert result[1]["text"] == "Page 2 text"
-                    assert result[1]["confidence"] == "medium"
-                    assert "data" in result[1]
-                    assert result[1]["data"]["total_amount"] == "1,234.56"
 
-    def test_process_pdf_success_with_keys(self):
-        """Test successful processing of a PDF with specific keys."""
-        # Create a mock file
-        mock_file = MagicMock()
+@pytest.mark.asyncio
+async def test_process_pdf_validation_error(mock_pdf_file):
+    """Test PDF processing with validation error."""
+    with patch("app.services.pdf_service.validate_pdf") as mock_validate:
+        # Configure mock to return False
+        mock_validate.return_value = False
         
-        # Define keys to extract
-        extract_keys = ["field1", "field2"]
+        # Call the function and check for exception
+        with pytest.raises(PDFProcessingError):
+            await process_pdf(mock_pdf_file)
         
-        # Mock validate_pdf to return True
-        with patch("app.services.pdf_service.validate_pdf", return_value=True):
-            # Mock split_pdf to return two pages
-            with patch("app.services.pdf_service.split_pdf", return_value=[b"page1", b"page2"]):
-                # Mock perform_ocr to return different results for each page
-                with patch("app.services.pdf_service.perform_ocr") as mock_ocr:
-                    mock_ocr.side_effect = [
-                        {
-                            "text": "Page 1 text", 
-                            "confidence": "high",
-                            "data": {"field1": "Value 1", "field2": "Value 2"}
-                        },
-                        {
-                            "text": "Page 2 text", 
-                            "confidence": "medium",
-                            "data": {"field1": "Value 3", "field2": "Value 4"}
-                        }
-                    ]
-                    
-                    # Call process_pdf with keys
-                    result = process_pdf(mock_file, extract_keys)
-                    
-                    # Check result
-                    assert len(result) == 2
-                    assert result[0]["page_number"] == 1
-                    assert result[0]["text"] == "Page 1 text"
-                    assert result[0]["confidence"] == "high"
-                    assert "data" in result[0]
-                    assert result[0]["data"]["field1"] == "Value 1"
-                    assert result[0]["data"]["field2"] == "Value 2"
-                    assert result[1]["page_number"] == 2
-                    assert result[1]["text"] == "Page 2 text"
-                    assert result[1]["confidence"] == "medium"
-                    assert "data" in result[1]
-                    assert result[1]["data"]["field1"] == "Value 3"
-                    assert result[1]["data"]["field2"] == "Value 4"
-                    
-                    # Verify perform_ocr was called with the right keys
-                    mock_ocr.assert_called_with(b"page2", extract_keys)
+        # Verify the function call
+        mock_validate.assert_called_once_with(mock_pdf_file)
 
-    def test_process_pdf_invalid(self):
-        """Test processing an invalid PDF."""
-        # Create a mock file
-        mock_file = MagicMock()
-        
-        # Mock validate_pdf to return False
-        with patch("app.services.pdf_service.validate_pdf", return_value=False):
-            # Call process_pdf and check exception
-            with pytest.raises(PDFProcessingError) as excinfo:
-                process_pdf(mock_file)
-            
-            # Verify error message
-            assert "Invalid PDF file" in str(excinfo.value)
 
-    def test_process_pdf_exception(self):
-        """Test processing when an exception occurs."""
-        # Create a mock file
-        mock_file = MagicMock()
+@pytest.mark.asyncio
+async def test_process_pdf_splitting_error(mock_pdf_file):
+    """Test PDF processing with splitting error."""
+    with patch("app.services.pdf_service.validate_pdf") as mock_validate, \
+         patch("app.services.pdf_service.split_pdf") as mock_split:
         
-        # Force an exception in validate_pdf
-        with patch("app.services.pdf_service.validate_pdf", side_effect=Exception("Test error")):
-            # Call process_pdf and check exception
-            with pytest.raises(PDFProcessingError) as excinfo:
-                process_pdf(mock_file)
-            
-            # Verify error message
-            assert "Error processing PDF: Test error" in str(excinfo.value) 
+        # Configure mocks
+        mock_validate.return_value = True
+        mock_split.side_effect = Exception("Error splitting PDF")
+        
+        # Call the function and check for exception
+        with pytest.raises(PDFProcessingError):
+            await process_pdf(mock_pdf_file)
+        
+        # Verify the function calls
+        mock_validate.assert_called_once_with(mock_pdf_file)
+        mock_split.assert_called_once_with(mock_pdf_file)
+
+
+@pytest.mark.asyncio
+async def test_process_pdf_ocr_error(mock_pdf_file):
+    """Test PDF processing with OCR error."""
+    with patch("app.services.pdf_service.validate_pdf") as mock_validate, \
+         patch("app.services.pdf_service.split_pdf") as mock_split, \
+         patch("app.services.llm.ocr_service.default_ocr_service.process_document") as mock_ocr:
+        
+        # Configure mocks
+        mock_validate.return_value = True
+        mock_split.return_value = [b"page1", b"page2"]
+        mock_ocr.side_effect = Exception("OCR error")
+        
+        # Call the function and check for exception
+        with pytest.raises(PDFProcessingError):
+            await process_pdf(mock_pdf_file)
+        
+        # Verify the function calls
+        mock_validate.assert_called_once_with(mock_pdf_file)
+        mock_split.assert_called_once_with(mock_pdf_file)
+        mock_ocr.assert_called_once() 
