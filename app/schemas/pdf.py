@@ -1,34 +1,83 @@
-from typing import Dict, List, Optional, Any
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
-
-class OCRResult(BaseModel):
-    """Schema for OCR result of a single page."""
-    page_number: int = Field(..., description="Page number in the original PDF")
-    text: Optional[str] = Field(None, description="Extracted text from OCR")
-    confidence: str = Field(..., description="Confidence level of the OCR result")
-    data: Dict[str, Any] = Field(default_factory=dict, description="Dictionary containing extracted data")
+from app.services.llm.client import LLMConfig, LLMProvider
 
 
-class OCRResponse(BaseModel):
-    """Schema for OCR processing response."""
-    status: str = Field("success", description="Processing status")
-    message: Optional[str] = Field(None, description="Additional information")
-    pages_processed: int = Field(..., description="Number of pages processed")
-    results: List[OCRResult] = Field(..., description="List of OCR results per page")
-
-
-class OCRRequest(BaseModel):
-    """Schema for OCR processing request parameters."""
+class PDFProcessRequest(BaseModel):
+    """Request schema for PDF processing."""
     extract_keys: Optional[List[str]] = Field(
-        None, 
-        description="List of keys to extract from the document. If not provided, all possible keys will be extracted."
+        default=None,
+        description="List of keys to extract from the document"
+    )
+    llm_config: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional LLM configuration for this request"
+    )
+    custom_prompt: Optional[str] = Field(
+        default=None,
+        description="Optional custom prompt for the LLM"
     )
 
 
-class ErrorResponse(BaseModel):
-    """Schema for error responses."""
-    status: str = Field("error", description="Error status")
-    message: str = Field(..., description="Error message")
-    detail: Optional[str] = Field(None, description="Detailed error information") 
+class OCRData(BaseModel):
+    """Schema for OCR extracted data."""
+    # This is a dynamic model that can have any fields
+    # Based on extract_keys or LLM extraction
+    class Config:
+        extra = "allow"
+
+
+class OCRPageResult(BaseModel):
+    """Schema for OCR result of a single page."""
+    page_number: int = Field(..., description="Page number (1-based)")
+    text: str = Field(..., description="Extracted text content")
+    confidence: str = Field(..., description="OCR confidence level (e.g., 'high', 'medium', 'low')")
+    data: OCRData = Field(..., description="Extracted structured data")
+
+
+class PDFProcessResponse(BaseModel):
+    """Response schema for PDF processing."""
+    pages: List[OCRPageResult] = Field(..., description="List of OCR results for each page")
+
+
+class PDFProcessErrorResponse(BaseModel):
+    """Error response schema for PDF processing."""
+    detail: str = Field(..., description="Error message")
+
+
+# Schema for LLM configuration validation
+class PDFProcessLLMConfig(BaseModel):
+    """LLM configuration schema for PDF processing."""
+    provider: Optional[str] = Field(
+        default=None, 
+        description="LLM provider (e.g., 'openai', 'anthropic', 'gemini')"
+    )
+    model: Optional[str] = Field(
+        default=None,
+        description="LLM model name"
+    )
+    temperature: Optional[float] = Field(
+        default=None,
+        description="Temperature for LLM generation (0.0 to 1.0)"
+    )
+    max_tokens: Optional[int] = Field(
+        default=None,
+        description="Maximum tokens for LLM generation"
+    )
+    
+    def to_llm_config(self) -> LLMConfig:
+        """Convert to LLMConfig object."""
+        config_data = {}
+        
+        if self.provider:
+            config_data["provider"] = LLMProvider(self.provider)
+        if self.model:
+            config_data["model"] = self.model
+        if self.temperature is not None:
+            config_data["temperature"] = self.temperature
+        if self.max_tokens is not None:
+            config_data["max_tokens"] = self.max_tokens
+            
+        return LLMConfig(**config_data) 
