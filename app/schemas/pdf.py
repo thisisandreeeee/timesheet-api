@@ -1,6 +1,6 @@
 from typing import Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 from app.services.llm.client import LLMConfig, LLMProvider
 
@@ -25,8 +25,7 @@ class OCRData(BaseModel):
     """Schema for OCR extracted data."""
     # This is a dynamic model that can have any fields
     # Based on extract_keys or LLM extraction
-    class Config:
-        extra = "allow"
+    model_config = ConfigDict(extra="allow")
 
 
 class OCRPageResult(BaseModel):

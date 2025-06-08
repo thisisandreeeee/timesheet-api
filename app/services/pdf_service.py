@@ -3,7 +3,7 @@ import os
 import tempfile
 from typing import BinaryIO, Dict, List, Optional, Any
 
-from PyPDF2 import PdfReader, PdfWriter
+from pypdf import PdfReader, PdfWriter
 
 from app.services.llm.ocr_service import default_ocr_service
 

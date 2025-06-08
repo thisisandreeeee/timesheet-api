@@ -43,7 +43,7 @@ class OCRService:
         logger.info(f"Using LLM config for route {route_path}: {llm_config}")
         
         # Define the prompt for OCR
-        prompt = custom_prompt or "Extract text and data from the following PDF document pages."
+        prompt = custom_prompt or "Extract data from the following PDF document pages."
         
         # Process all pages with the LLM
         try:
