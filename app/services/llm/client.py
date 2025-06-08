@@ -86,20 +86,18 @@ class LLMClient:
         stop=stop_after_attempt(lambda self: self.config.max_retries),
         reraise=True,
     )
-    async def process_pdf(
+    async def completion(
         self,
-        pdf_bytes: List[bytes],
-        prompt: str,
-        extract_keys: Optional[List[str]] = None,
+        messages: List[Dict[str, Any]],
         config: Optional[LLMConfig] = None,
+        response_format: Optional[Dict[str, str]] = None,
     ) -> Dict[str, Any]:
-        """Process PDF pages using vision LLM.
+        """Make a completion request to the LLM.
         
         Args:
-            pdf_bytes: List of PDF page bytes to process
-            prompt: The prompt to send to the LLM
-            extract_keys: Optional list of keys to extract from the document
+            messages: List of message dictionaries to send to the LLM
             config: Optional LLM configuration to override the default
+            response_format: Optional response format configuration
             
         Returns:
             Dictionary containing LLM response data
@@ -107,54 +105,8 @@ class LLMClient:
         # Use provided config or default
         config = config or self.config
         
-        # Create prompts based on extraction needs
-        system_prompt = "You are an expert document processor specialized in extracting information from PDFs."
-        
-        if extract_keys:
-            fields_prompt = ", ".join(extract_keys)
-            user_prompt = (
-                f"Please extract the following fields from the PDF document: {fields_prompt}.\n"
-                f"For each page, return a dictionary with 'page_number' and 'data' containing extracted fields.\n"
-                f"Return the result as a JSON object with 'pages' as the key, containing an array of page results.\n"
-                f"Example format: {{ 'pages': [{{ 'page_number': int, 'data': {{ 'field1': 'value1', ... }} }}, ...] }}"
-            )
-        else:
-            user_prompt = (
-                f"Extract all relevant information from this PDF document.\n"
-                f"For each page, return a dictionary with 'page_number' and 'data' containing all extracted fields.\n"
-                f"Return the result as a JSON object with 'pages' as the key, containing an array of page results.\n"
-                f"Example format: {{ 'pages': [{{ 'page_number': int, 'data': {{ 'field1': 'value1', ... }} }}, ...] }}"
-            )
-        
-        # Prepare PDF pages for the LLM
-        pdf_contents = []
-        for pdf_page in pdf_bytes:
-            # Convert PDF page bytes to base64
-            base64_pdf = base64.b64encode(pdf_page).decode("utf-8")
-            
-            # Add to message content
-            pdf_contents.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:application/pdf;base64,{base64_pdf}",
-                    "detail": "high"
-                }
-            })
-        
-        # Create the full message
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {
-                "role": "user", 
-                "content": [
-                    {"type": "text", "text": user_prompt},
-                    *pdf_contents
-                ]
-            }
-        ]
-        
         try:
-            logger.info(f"Sending PDF processing request to {config.provider} model {config.model}")
+            logger.info(f"Sending completion request to {config.provider} model {config.model}")
             
             # Make the API call
             response = await litellm.acompletion(
@@ -162,7 +114,7 @@ class LLMClient:
                 messages=messages,
                 temperature=config.temperature,
                 max_tokens=config.max_tokens,
-                response_format={"type": "json_object"},
+                response_format=response_format or {"type": "json_object"},
             )
             
             # Parse the response

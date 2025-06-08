@@ -103,7 +103,7 @@ class TestOCRService:
         """Test processing a document with the OCR service."""
         # Create a mock LLM client
         mock_client = MagicMock()
-        mock_client.process_pdf = AsyncMock(return_value={
+        mock_client.completion = AsyncMock(return_value={
             "pages": [
                 {
                     "page_number": 1,
@@ -145,18 +145,19 @@ class TestOCRService:
         assert results[1]["page_number"] == 2
         
         # Verify the client was called correctly
-        mock_client.process_pdf.assert_called_once_with(
-            pdf_bytes=pdf_pages,
-            prompt="Extract data from the following PDF document pages.",
-            extract_keys=extract_keys,
-            config=mock_get_config.return_value
-        )
+        mock_client.completion.assert_called_once()
+        # Get the call arguments
+        call_args = mock_client.completion.call_args[1]
+        assert "messages" in call_args
+        assert "config" in call_args
+        assert call_args["config"] == mock_get_config.return_value
+        assert call_args["response_format"] == {"type": "json_object"}
     
     async def test_process_document_error(self):
         """Test error handling in the OCR service."""
         # Create a mock LLM client that raises an exception
         mock_client = MagicMock()
-        mock_client.process_pdf = AsyncMock(side_effect=Exception("API error"))
+        mock_client.completion = AsyncMock(side_effect=Exception("API error"))
         
         # Create the service with the mock client
         service = OCRService(mock_client)

@@ -1,8 +1,9 @@
+import base64
 import json
 import logging
 from typing import Any, Dict, List, Optional
 
-from app.services.llm.client import LLMClient, LLMConfig, default_client
+from app.services.llm.client import LLMClient, default_client
 from app.services.llm.config import config_manager
 
 # Configure logging
@@ -43,16 +44,15 @@ class OCRService:
         llm_config = config_manager.get_config(route_path)
         logger.info(f"Using LLM config for route {route_path}: {llm_config}")
         
-        # Define the prompt for OCR
-        prompt = custom_prompt or "Extract data from the following PDF document pages."
+        # Create the messages for the LLM request
+        messages = self._create_pdf_messages(pdf_pages, custom_prompt, extract_keys)
         
         # Process all pages with the LLM
         try:
-            results = await self.llm_client.process_pdf(
-                pdf_bytes=pdf_pages,
-                prompt=prompt,
-                extract_keys=extract_keys,
-                config=llm_config
+            results = await self.llm_client.completion(
+                messages=messages,
+                config=llm_config,
+                response_format={"type": "json_object"},
             )
             
             logger.info(f"Raw LLM results: {str(results)[:500]}...")
@@ -69,6 +69,69 @@ class OCRService:
                 "text": f"Error processing document: {str(e)}",
                 "data": {}
             }]
+    
+    def _create_pdf_messages(
+        self,
+        pdf_pages: List[bytes],
+        custom_prompt: Optional[str] = None,
+        extract_keys: Optional[List[str]] = None,
+    ) -> List[Dict[str, Any]]:
+        """Create messages for PDF processing with the LLM.
+        
+        Args:
+            pdf_pages: List of PDF page bytes to process
+            custom_prompt: Optional custom prompt to override the default
+            extract_keys: Optional list of keys to extract from the document
+            
+        Returns:
+            List of message dictionaries to send to the LLM
+        """
+        # Create prompts based on extraction needs
+        system_prompt = "You are an expert document processor specialized in extracting information from PDFs."
+        
+        # Build the user prompt
+        if extract_keys:
+            fields_prompt = ", ".join(extract_keys)
+            user_prompt = (
+                f"Please extract the following fields from the PDF document: {fields_prompt}.\n"
+                f"For each page, return a dictionary with 'page_number' and 'data' containing extracted fields.\n"
+                f"Return the result as a JSON object with 'pages' as the key, containing an array of page results.\n"
+                f"Example format: {{ 'pages': [{{ 'page_number': int, 'data': {{ 'field1': 'value1', ... }} }}, ...] }}"
+            )
+        else:
+            user_prompt = custom_prompt or (
+                f"Extract all relevant information from this PDF document.\n"
+                f"For each page, return a dictionary with 'page_number' and 'data' containing all extracted fields.\n"
+                f"Return the result as a JSON object with 'pages' as the key, containing an array of page results.\n"
+                f"Example format: {{ 'pages': [{{ 'page_number': int, 'data': {{ 'field1': 'value1', ... }} }}, ...] }}"
+            )
+        
+        # Prepare PDF pages for the LLM
+        pdf_contents = []
+        for pdf_page in pdf_pages:
+            # Convert PDF page bytes to base64
+            base64_pdf = base64.b64encode(pdf_page).decode("utf-8")
+            
+            # Add to message content
+            pdf_contents.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:application/pdf;base64,{base64_pdf}",
+                    "detail": "high"
+                }
+            })
+        
+        # Create the full message
+        return [
+            {"role": "system", "content": system_prompt},
+            {
+                "role": "user", 
+                "content": [
+                    {"type": "text", "text": user_prompt},
+                    *pdf_contents
+                ]
+            }
+        ]
     
     def _format_results(self, results: Any) -> List[Dict[str, Any]]:
         """Format and standardize LLM results.
