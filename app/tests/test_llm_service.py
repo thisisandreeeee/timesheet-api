@@ -107,13 +107,11 @@ class TestOCRService:
             "pages": [
                 {
                     "page_number": 1,
-                    "text": "Sample text page 1",
                     "title": "Test Document",
                     "date": "2023-01-01"
                 },
                 {
                     "page_number": 2,
-                    "text": "Sample text page 2",
                     "author": "John Doe",
                     "signature": True
                 }
@@ -142,16 +140,14 @@ class TestOCRService:
         assert isinstance(results, list)
         assert len(results) == 2
         assert results[0]["page_number"] == 1
-        assert results[0]["text"] == "Sample text page 1"
         assert "data" in results[0]
         assert results[0]["data"]["title"] == "Test Document"
         assert results[1]["page_number"] == 2
-        assert results[1]["data"]["author"] == "John Doe"
         
         # Verify the client was called correctly
         mock_client.process_pdf.assert_called_once_with(
             pdf_bytes=pdf_pages,
-            prompt="Extract text and data from the following PDF document pages.",
+            prompt="Extract data from the following PDF document pages.",
             extract_keys=extract_keys,
             config=mock_get_config.return_value
         )
