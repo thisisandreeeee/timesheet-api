@@ -5,7 +5,6 @@ from typing import List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
 from pydantic import ValidationError
 
 from app.schemas.pdf import (
@@ -14,8 +13,8 @@ from app.schemas.pdf import (
     PDFProcessResponse,
 )
 from app.services.pdf_service import PDFProcessingError, process_pdf
-from app.services.llm.client import LLMConfig
 from app.services.llm.config import config_manager
+from app.services.llm.client import LLMConfig
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -42,7 +41,7 @@ app.add_middleware(
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    return {"status": "healthy"}
+    return {"status": "ok"}
 
 
 # PDF processing endpoint
@@ -57,17 +56,15 @@ async def health_check():
 )
 async def process_pdf_route(
     file: UploadFile = File(..., description="PDF file to process"),
-    extract_keys: Optional[List[str]] = Form(None, description="List of keys to extract"),
-    custom_prompt: Optional[str] = Form(None, description="Custom prompt for the LLM"),
-    llm_config_data: Optional[str] = Form(None, description="JSON string with LLM configuration"),
+    extract_keys: Optional[str] = Form(None, description="Comma-separated list of keys to extract"),
+    llm_config_data: Optional[str] = Form(None, description="LLM configuration in JSON format"),
 ):
     """
     Process a PDF file and extract structured data.
     
     - **file**: PDF file to upload
-    - **extract_keys**: Optional list of keys to extract from the document
-    - **custom_prompt**: Optional custom prompt for the LLM
-    - **llm_config_data**: Optional JSON string with LLM configuration
+    - **extract_keys**: Optional comma-separated list of keys to extract from the document
+    - **llm_config_data**: Optional LLM configuration in JSON format
     
     Returns a JSON response with OCR results for each page.
     """
@@ -78,29 +75,31 @@ async def process_pdf_route(
             detail="File must be a PDF",
         )
     
-    # Parse LLM configuration if provided
-    custom_llm_config = None
-    original_config = None
     route_path = "/ocr/pdf"
     
+    # Parse extract_keys
+    extract_keys_list = None
+    if extract_keys:
+        extract_keys_list = [k.strip() for k in extract_keys.split(",") if k.strip()]
+    
+    # Handle LLM config if provided
+    if llm_config_data:
+        try:
+            # Parse the JSON data
+            llm_config_dict = json.loads(llm_config_data)
+            # Validate with Pydantic model
+            llm_config = LLMConfig(**llm_config_dict)
+            # Register for the route
+            config_manager.register_route_config(route_path, llm_config)
+            logger.info(f"Using custom LLM config for request: {llm_config}")
+        except (json.JSONDecodeError, ValidationError) as e:
+            logger.error(f"Invalid LLM configuration: {str(e)}")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid LLM configuration: {str(e)}",
+            )
+    
     try:
-        # Parse and register custom LLM config if provided
-        if llm_config_data:
-            try:
-                config_dict = json.loads(llm_config_data)
-                llm_config_model = PDFProcessLLMConfig(**config_dict)
-                custom_llm_config = llm_config_model.to_llm_config()
-                
-                # Backup existing config and register custom config
-                original_config = config_manager.get_config(route_path)
-                config_manager.register_route_config(route_path, custom_llm_config)
-            except Exception as e:
-                logger.error(f"Error parsing LLM config: {str(e)}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Invalid LLM configuration: {str(e)}",
-                )
-        
         # Read file into memory
         file_bytes = await file.read()
         file_obj = io.BytesIO(file_bytes)
@@ -108,7 +107,7 @@ async def process_pdf_route(
         # Process the PDF
         results = await process_pdf(
             file=file_obj,
-            extract_keys=extract_keys,
+            extract_keys=extract_keys_list,
             route_path=route_path,
         )
         
@@ -136,11 +135,6 @@ async def process_pdf_route(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error: {str(e)}",
         )
-    finally:
-        # Restore original config if we used a custom one
-        if custom_llm_config and original_config:
-            config_manager.register_route_config(route_path, original_config)
-
 
 @app.get("/")
 async def root():
