@@ -1,6 +1,8 @@
 import base64
+import json
 import logging
 import os
+import re
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union
 
@@ -105,8 +107,7 @@ class LLMClient:
         # Use provided config or default
         config = config or self.config
         
-        # Create a prompt that instructs the LLM to extract data
-        # If extract_keys are provided, instruct the LLM to extract those specific fields
+        # Create prompts based on extraction needs
         system_prompt = "You are an expert document processor specialized in extracting information from PDFs."
         
         if extract_keys:
@@ -115,7 +116,6 @@ class LLMClient:
                 f"Please extract the following fields from the PDF document: {fields_prompt}.\n"
                 f"For each page, return a dictionary with 'page_number' and 'data' containing extracted fields.\n"
                 f"Return the result as a JSON object with 'pages' as the key, containing an array of page results.\n"
-                f"The 'page_number' should be an auto incrementing integer starting from 1. Each field in the 'data' dictionary should follow the same naming convention and have the same data type.\n"
                 f"Example format: {{ 'pages': [{{ 'page_number': int, 'data': {{ 'field1': 'value1', ... }} }}, ...] }}"
             )
         else:
@@ -123,13 +123,12 @@ class LLMClient:
                 f"Extract all relevant information from this PDF document.\n"
                 f"For each page, return a dictionary with 'page_number' and 'data' containing all extracted fields.\n"
                 f"Return the result as a JSON object with 'pages' as the key, containing an array of page results.\n"
-                f"The 'page_number' should be an auto incrementing integer starting from 1. Each field in the 'data' dictionary should follow the same naming convention and have the same data type.\n"
                 f"Example format: {{ 'pages': [{{ 'page_number': int, 'data': {{ 'field1': 'value1', ... }} }}, ...] }}"
             )
         
-        # Prepare PDF pages for the LLM (similar to images)
+        # Prepare PDF pages for the LLM
         pdf_contents = []
-        for i, pdf_page in enumerate(pdf_bytes):
+        for pdf_page in pdf_bytes:
             # Convert PDF page bytes to base64
             base64_pdf = base64.b64encode(pdf_page).decode("utf-8")
             
@@ -170,50 +169,40 @@ class LLMClient:
             content = response.choices[0].message.content
             logger.info(f"Received response from LLM: {content[:100]}...")
             
-            # Extract and return the JSON content
-            try:
-                import json
-                
-                # Try to parse the content as JSON
-                result = json.loads(content)
-                
-                # Check if the result has a "raw_content" field that might be JSON
-                if "raw_content" in result and isinstance(result["raw_content"], str):
-                    try:
-                        # Try parsing the raw_content as JSON
-                        nested_result = json.loads(result["raw_content"])
-                        return nested_result
-                    except json.JSONDecodeError:
-                        # If that fails, keep the original result
-                        pass
-                
-                # Ensure the result has the expected structure
-                if "pages" not in result:
-                    # Create a standard format if pages is missing
-                    result = {"pages": [result]}
-                
-                return result
-                
-            except json.JSONDecodeError as e:
-                logger.error(f"Error parsing JSON response: {content}")
-                
-                # Try to extract JSON if it appears to be wrapped in markdown code blocks or other text
-                try:
-                    # Look for JSON-like structure in the content
-                    import re
-                    json_match = re.search(r'(\{.*\})', content, re.DOTALL)
-                    if json_match:
-                        potential_json = json_match.group(1)
-                        nested_result = json.loads(potential_json)
-                        return nested_result
-                except Exception:
-                    pass
-                
-                return {"error": "Failed to parse LLM response as JSON", "raw_content": content}
+            return self._parse_llm_response(content)
             
         except Exception as e:
             logger.error(f"Error calling LLM API: {str(e)}")
             raise
+    
+    def _parse_llm_response(self, content: str) -> Dict[str, Any]:
+        """Parse LLM response content into structured data.
+        
+        Args:
+            content: LLM response content as string
+            
+        Returns:
+            Dictionary containing parsed data
+        """
+        # First try direct JSON parsing
+        try:
+            return json.loads(content)
+        except json.JSONDecodeError:
+            # If direct parsing fails, try to extract JSON from content
+            try:
+                # Look for JSON-like structure in the content
+                json_match = re.search(r'(\{.*\})', content, re.DOTALL)
+                if json_match:
+                    potential_json = json_match.group(1)
+                    return json.loads(potential_json)
+            except Exception:
+                pass
+            
+            # If all parsing attempts fail, return error object
+            return {
+                "error": "Failed to parse LLM response as JSON",
+                "raw_content": content
+            }
 
 
 # Create a default client instance

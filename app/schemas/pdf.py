@@ -11,10 +11,6 @@ class PDFProcessRequest(BaseModel):
         default=None,
         description="List of keys to extract from the document"
     )
-    llm_config: Optional[Dict[str, Any]] = Field(
-        default=None,
-        description="Optional LLM configuration for this request"
-    )
     custom_prompt: Optional[str] = Field(
         default=None,
         description="Optional custom prompt for the LLM"
@@ -31,9 +27,9 @@ class OCRData(BaseModel):
 class OCRPageResult(BaseModel):
     """Schema for OCR result of a single page."""
     page_number: int = Field(..., description="Page number (1-based)")
-    text: str = Field(..., description="Extracted text content")
-    confidence: str = Field(..., description="OCR confidence level (e.g., 'high', 'medium', 'low')")
-    data: OCRData = Field(..., description="Extracted structured data")
+    text: str = Field(default="", description="Extracted text content")
+    confidence: str = Field(default="medium", description="OCR confidence level (e.g., 'high', 'medium', 'low')")
+    data: OCRData = Field(default_factory=dict, description="Extracted structured data")
 
 
 class PDFProcessResponse(BaseModel):

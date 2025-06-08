@@ -1,4 +1,5 @@
 import io
+import json
 import logging
 from typing import List, Optional
 
@@ -70,36 +71,35 @@ async def process_pdf_route(
     
     Returns a JSON response with OCR results for each page.
     """
+    # Validate file content type
+    if file.content_type != "application/pdf":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="File must be a PDF",
+        )
+    
+    # Parse LLM configuration if provided
+    custom_llm_config = None
+    original_config = None
+    route_path = "/ocr/pdf"
+    
     try:
-        # Validate file content type
-        if file.content_type != "application/pdf":
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File must be a PDF",
-            )
-        
-        # Parse LLM configuration if provided
-        custom_llm_config = None
+        # Parse and register custom LLM config if provided
         if llm_config_data:
             try:
-                import json
                 config_dict = json.loads(llm_config_data)
                 llm_config_model = PDFProcessLLMConfig(**config_dict)
                 custom_llm_config = llm_config_model.to_llm_config()
+                
+                # Backup existing config and register custom config
+                original_config = config_manager.get_config(route_path)
+                config_manager.register_route_config(route_path, custom_llm_config)
             except Exception as e:
                 logger.error(f"Error parsing LLM config: {str(e)}")
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid LLM configuration: {str(e)}",
                 )
-        
-        # If custom LLM config is provided, temporarily register it for this request
-        route_path = "/ocr/pdf"
-        if custom_llm_config:
-            # Backup the existing config
-            original_config = config_manager.get_config(route_path)
-            # Register the custom config
-            config_manager.register_route_config(route_path, custom_llm_config)
         
         # Read file into memory
         file_bytes = await file.read()
@@ -111,10 +111,6 @@ async def process_pdf_route(
             extract_keys=extract_keys,
             route_path=route_path,
         )
-        
-        # Restore original config if we used a custom one
-        if custom_llm_config:
-            config_manager.register_route_config(route_path, original_config)
         
         # Return results
         return PDFProcessResponse(pages=results)
@@ -140,6 +136,10 @@ async def process_pdf_route(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error: {str(e)}",
         )
+    finally:
+        # Restore original config if we used a custom one
+        if custom_llm_config and original_config:
+            config_manager.register_route_config(route_path, original_config)
 
 
 @app.get("/")

@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Dict, List, Optional
 
@@ -57,74 +58,7 @@ class OCRService:
             logger.info(f"Raw LLM results: {str(results)[:500]}...")
             
             # Structure the results by page
-            page_results = []
-            
-            # Check if the results contain a 'pages' key with a list
-            if isinstance(results, dict) and "pages" in results and isinstance(results["pages"], list):
-                # Use the pages list directly
-                page_results = results["pages"]
-            # Check if we got a list directly
-            elif isinstance(results, list):
-                # Use the list directly
-                page_results = results
-            # Check if we have a single result dictionary
-            elif isinstance(results, dict):
-                # If there's an error key, try to extract nested JSON from raw_content
-                if "error" in results and "raw_content" in results:
-                    import json
-                    try:
-                        # Try to parse raw_content as JSON
-                        raw_content = results["raw_content"]
-                        parsed_content = json.loads(raw_content)
-                        
-                        # Check if parsed content has pages
-                        if isinstance(parsed_content, dict) and "pages" in parsed_content:
-                            page_results = parsed_content["pages"]
-                        else:
-                            # Create a single page result
-                            page_results = [parsed_content]
-                    except (json.JSONDecodeError, TypeError):
-                        # If parsing fails, use the original dict
-                        page_results = [results]
-                else:
-                    # Create a single page result
-                    page_results = [results]
-            else:
-                # Handle unexpected result type
-                logger.error(f"Unexpected result type from LLM: {type(results)}")
-                page_results = [{"error": "Unexpected result format from LLM"}]
-            
-            # Format the results to include page numbers
-            formatted_results = []
-            for i, result in enumerate(page_results):
-                if not isinstance(result, dict):
-                    logger.warning(f"Unexpected page result type: {type(result)}")
-                    result = {"error": f"Unexpected page result type: {type(result)}"}
-                
-                # Add page number if not already present
-                if "page_number" not in result:
-                    result["page_number"] = i + 1
-                
-                # Add data field if not already present
-                if "data" not in result:
-                    # Move all fields except page_number, confidence, and text to data
-                    data = {}
-                    keys_to_exclude = ["page_number"]
-                    for key, value in list(result.items()):
-                        if key not in keys_to_exclude:
-                            data[key] = value
-                            # Remove from top level
-                            del result[key]
-                    result["data"] = data
-                
-                # Ensure data is a dictionary
-                if not isinstance(result["data"], dict):
-                    logger.warning(f"Data is not a dictionary: {result['data']}")
-                    result["data"] = {}
-                
-                formatted_results.append(result)
-            
-            return formatted_results
+            return self._format_results(results)
             
         except Exception as e:
             logger.error(f"Error processing document with LLM: {str(e)}")
@@ -135,6 +69,75 @@ class OCRService:
                 "text": f"Error processing document: {str(e)}",
                 "data": {}
             }]
+    
+    def _format_results(self, results: Any) -> List[Dict[str, Any]]:
+        """Format and standardize LLM results.
+        
+        Args:
+            results: Raw results from LLM
+            
+        Returns:
+            List of formatted page results
+        """
+        # Initialize empty result list
+        page_results = []
+        
+        # Handle different result formats
+        if isinstance(results, dict):
+            if "pages" in results and isinstance(results["pages"], list):
+                # Use the pages list directly
+                page_results = results["pages"]
+            elif "error" in results and "raw_content" in results:
+                # Try to parse raw_content as JSON
+                try:
+                    parsed_content = json.loads(results["raw_content"])
+                    if isinstance(parsed_content, dict) and "pages" in parsed_content:
+                        page_results = parsed_content["pages"]
+                    else:
+                        page_results = [parsed_content]
+                except (json.JSONDecodeError, TypeError):
+                    page_results = [results]
+            else:
+                # Create a single page result
+                page_results = [results]
+        elif isinstance(results, list):
+            # Use the list directly
+            page_results = results
+        else:
+            # Handle unexpected result type
+            logger.error(f"Unexpected result type from LLM: {type(results)}")
+            page_results = [{"error": "Unexpected result format from LLM"}]
+        
+        # Format the results to include page numbers
+        formatted_results = []
+        for i, result in enumerate(page_results):
+            if not isinstance(result, dict):
+                logger.warning(f"Unexpected page result type: {type(result)}")
+                result = {"error": f"Unexpected page result type: {type(result)}"}
+            
+            # Create standardized result structure
+            formatted_result = {
+                "page_number": result.get("page_number", i + 1),
+                "text": result.get("text", ""),
+                "confidence": result.get("confidence", "medium"),
+                "data": {}
+            }
+            
+            # Extract data fields
+            if "data" in result and isinstance(result["data"], dict):
+                formatted_result["data"] = result["data"]
+            else:
+                # Move all fields except standard ones to data
+                data = {}
+                keys_to_exclude = ["page_number", "text", "confidence"]
+                for key, value in result.items():
+                    if key not in keys_to_exclude:
+                        data[key] = value
+                formatted_result["data"] = data
+            
+            formatted_results.append(formatted_result)
+        
+        return formatted_results
 
 
 # Create a default OCR service instance

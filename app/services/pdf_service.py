@@ -1,6 +1,4 @@
 import io
-import os
-import tempfile
 from typing import BinaryIO, Dict, List, Optional, Any
 
 from pypdf import PdfReader, PdfWriter
@@ -104,23 +102,23 @@ async def process_pdf(file: BinaryIO, extract_keys: Optional[List[str]] = None, 
     Raises:
         PDFProcessingError: If there's an error during processing
     """
+    # Validate PDF - if invalid, this will raise PDFProcessingError
+    if not validate_pdf(file):
+        raise PDFProcessingError("Invalid PDF file")
+    
     try:
-        # Validate PDF
-        if not validate_pdf(file):
-            raise PDFProcessingError("Invalid PDF file")
-        
         # Split PDF into pages
         pdf_pages = split_pdf(file)
         
         # Process all pages with the OCR service
-        results = await default_ocr_service.process_document(
+        return await default_ocr_service.process_document(
             pdf_pages=pdf_pages,
             extract_keys=extract_keys,
             route_path=route_path
         )
-        
-        return results
+    except PDFProcessingError:
+        # Re-raise PDF processing errors
+        raise
     except Exception as e:
-        if not isinstance(e, PDFProcessingError):
-            raise PDFProcessingError(f"Error processing PDF: {str(e)}")
-        raise 
+        # Wrap other exceptions in PDFProcessingError
+        raise PDFProcessingError(f"Error processing PDF: {str(e)}") 

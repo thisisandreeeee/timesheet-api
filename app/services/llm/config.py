@@ -15,10 +15,14 @@ class RouteConfig(BaseModel):
 class LLMConfigManager:
     """Manager for LLM configurations per route."""
     
-    def __init__(self):
-        """Initialize the LLM configuration manager."""
+    def __init__(self, default_config: Optional[LLMConfig] = None):
+        """Initialize the LLM configuration manager.
+        
+        Args:
+            default_config: Optional default LLM configuration. If None, a new default config will be created.
+        """
         self._route_configs: Dict[str, LLMConfig] = {}
-        self._default_config = LLMConfig()
+        self._default_config = default_config or LLMConfig()
     
     def register_route_config(self, route_path: str, config: LLMConfig) -> None:
         """Register a LLM configuration for a specific route.
@@ -33,7 +37,7 @@ class LLMConfigManager:
         """Get LLM configuration for a route.
         
         Args:
-            route_path: API route path. If None, returns default config.
+            route_path: API route path. If None or not found, returns default config.
             
         Returns:
             LLM configuration for the route or default config
@@ -43,7 +47,7 @@ class LLMConfigManager:
         return self._default_config
 
 
-# Example of initializing with route-specific configurations
+# Initialize the configuration manager
 config_manager = LLMConfigManager()
 
 # Define configuration for OCR PDF route
