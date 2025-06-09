@@ -34,10 +34,7 @@ def mock_employee_uuid():
 @pytest.fixture
 def mock_employee_data():
     """Sample employee data."""
-    return {
-        "staff_code": "EMP001",
-        "name": "John Doe"
-    }
+    return {"staff_code": "EMP001", "name": "John Doe"}
 
 
 @pytest.fixture
@@ -49,7 +46,7 @@ def mock_timesheet_data():
         "total_working_days": 22,
         "total_ot_hours": 5.5,
         "total_sundays_worked": 2,
-        "total_ot_hours_on_sundays": 1.0
+        "total_ot_hours_on_sundays": 1.0,
     }
 
 
@@ -58,4 +55,4 @@ def override_get_db(mock_db_conn):
     """Override the get_db dependency."""
     app.dependency_overrides[get_db] = lambda: mock_db_conn
     yield
-    app.dependency_overrides = {} 
+    app.dependency_overrides = {}

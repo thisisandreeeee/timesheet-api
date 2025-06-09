@@ -29,7 +29,7 @@ router = APIRouter(prefix="/ocr", tags=["ocr"])
         status.HTTP_500_INTERNAL_SERVER_ERROR: {"model": PDFProcessErrorResponse},
     },
     summary="Process PDF with OCR",
-    description="Extract structured data from PDF files using OCR and LLM processing."
+    description="Extract structured data from PDF files using OCR and LLM processing.",
 )
 async def process_pdf_route(
     file: UploadFile = File(..., description="PDF file to process"),
@@ -105,4 +105,4 @@ async def process_pdf_route(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error: {str(e)}",
-        ) 
+        )

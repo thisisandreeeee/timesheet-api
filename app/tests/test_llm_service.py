@@ -108,8 +108,14 @@ class TestOCRService:
         mock_client.completion = AsyncMock(
             return_value={
                 "pages": [
-                    {"page_number": 1, "data": {"title": "Test Document", "date": "2023-01-01"}},
-                    {"page_number": 2, "data": {"author": "John Doe", "signature": True}},
+                    {
+                        "page_number": 1,
+                        "data": {"title": "Test Document", "date": "2023-01-01"},
+                    },
+                    {
+                        "page_number": 2,
+                        "data": {"author": "John Doe", "signature": True},
+                    },
                 ]
             }
         )

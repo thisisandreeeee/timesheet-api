@@ -17,13 +17,10 @@ router = APIRouter(tags=["timesheets"])
     response_model=List[TimesheetResponse],
     summary="List all timesheets for an employee",
     description="Retrieve a list of all timesheets for a specific employee.",
-    responses={
-        status.HTTP_404_NOT_FOUND: {"model": NotFoundErrorResponse}
-    }
+    responses={status.HTTP_404_NOT_FOUND: {"model": NotFoundErrorResponse}},
 )
 async def get_employee_timesheets(
-    uuid: UUID,
-    conn: aiosqlite.Connection = Depends(get_db)
+    uuid: UUID, conn: aiosqlite.Connection = Depends(get_db)
 ):
     """Get all timesheets for an employee."""
     timesheets = await timesheet_service.get_employee_timesheets(conn, uuid)
@@ -35,15 +32,13 @@ async def get_employee_timesheets(
     response_model=TimesheetResponse,
     summary="Get specific timesheet",
     description="Retrieve a specific timesheet for an employee by year and month.",
-    responses={
-        status.HTTP_404_NOT_FOUND: {"model": NotFoundErrorResponse}
-    }
+    responses={status.HTTP_404_NOT_FOUND: {"model": NotFoundErrorResponse}},
 )
 async def get_employee_timesheet(
     uuid: UUID,
     year: int = Path(..., ge=2000, le=2100),
     month: int = Path(..., ge=1, le=12),
-    conn: aiosqlite.Connection = Depends(get_db)
+    conn: aiosqlite.Connection = Depends(get_db),
 ):
     """Get a specific timesheet for an employee."""
     return await timesheet_service.get_employee_timesheet(conn, uuid, year, month)
@@ -57,13 +52,11 @@ async def get_employee_timesheet(
     description="Create a new timesheet for a specific employee.",
     responses={
         status.HTTP_404_NOT_FOUND: {"model": NotFoundErrorResponse},
-        status.HTTP_409_CONFLICT: {"model": ConflictErrorResponse}
-    }
+        status.HTTP_409_CONFLICT: {"model": ConflictErrorResponse},
+    },
 )
 async def create_employee_timesheet(
-    uuid: UUID,
-    timesheet: TimesheetCreate,
-    conn: aiosqlite.Connection = Depends(get_db)
+    uuid: UUID, timesheet: TimesheetCreate, conn: aiosqlite.Connection = Depends(get_db)
 ):
     """Create a new timesheet for an employee."""
     return await timesheet_service.create_employee_timesheet(conn, uuid, timesheet)
@@ -74,16 +67,14 @@ async def create_employee_timesheet(
     response_model=TimesheetResponse,
     summary="Update timesheet",
     description="Update a specific timesheet for an employee.",
-    responses={
-        status.HTTP_404_NOT_FOUND: {"model": NotFoundErrorResponse}
-    }
+    responses={status.HTTP_404_NOT_FOUND: {"model": NotFoundErrorResponse}},
 )
 async def update_employee_timesheet(
     uuid: UUID,
     timesheet: TimesheetUpdate,
     year: int = Path(..., ge=2000, le=2100),
     month: int = Path(..., ge=1, le=12),
-    conn: aiosqlite.Connection = Depends(get_db)
+    conn: aiosqlite.Connection = Depends(get_db),
 ):
     """Update a specific timesheet for an employee."""
     return await timesheet_service.update_employee_timesheet(
@@ -96,16 +87,14 @@ async def update_employee_timesheet(
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete timesheet",
     description="Delete a specific timesheet for an employee.",
-    responses={
-        status.HTTP_404_NOT_FOUND: {"model": NotFoundErrorResponse}
-    }
+    responses={status.HTTP_404_NOT_FOUND: {"model": NotFoundErrorResponse}},
 )
 async def delete_employee_timesheet(
     uuid: UUID,
     year: int = Path(..., ge=2000, le=2100),
     month: int = Path(..., ge=1, le=12),
-    conn: aiosqlite.Connection = Depends(get_db)
+    conn: aiosqlite.Connection = Depends(get_db),
 ):
     """Delete a specific timesheet for an employee."""
     await timesheet_service.delete_employee_timesheet(conn, uuid, year, month)
-    return None 
+    return None

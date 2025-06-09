@@ -76,7 +76,9 @@ async def test_process_pdf_with_llm_config(test_client, mock_pdf_file):
     with (
         patch("app.routers.ocr_routes.process_pdf") as mock_process,
         patch("app.routers.ocr_routes.config_manager.get_config") as mock_get_config,
-        patch("app.routers.ocr_routes.config_manager.register_route_config") as mock_register_config,
+        patch(
+            "app.routers.ocr_routes.config_manager.register_route_config"
+        ) as mock_register_config,
     ):
 
         # Configure the mock to return sample results
@@ -137,7 +139,10 @@ async def test_process_pdf_invalid_file_type(test_client):
 async def test_process_pdf_processing_error(test_client, mock_pdf_file):
     """Test PDF processing with processing error."""
     # Mock the process_pdf function to raise an error
-    with patch("app.routers.ocr_routes.process_pdf", side_effect=PDFProcessingError("Test error")):
+    with patch(
+        "app.routers.ocr_routes.process_pdf",
+        side_effect=PDFProcessingError("Test error"),
+    ):
         # Create the file for upload
         test_file = io.BytesIO(mock_pdf_file)
         test_file.name = "test.pdf"

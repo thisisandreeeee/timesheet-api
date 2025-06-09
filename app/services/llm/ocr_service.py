@@ -138,21 +138,29 @@ Return the result as a JSON object with 'pages' as the key, containing an array 
             List of formatted page results
         """
         # Validate that results is a dictionary with 'pages' key
-        if isinstance(results, dict) and "pages" in results and isinstance(results["pages"], list):
+        if (
+            isinstance(results, dict)
+            and "pages" in results
+            and isinstance(results["pages"], list)
+        ):
             formatted_results = []
             for i, page in enumerate(results["pages"]):
                 if not isinstance(page, dict):
                     logger.warning(f"Unexpected page result type: {type(page)}")
                     continue
-                    
+
                 # Create standardized result structure with only page_number and data
                 formatted_result = {
                     "page_number": page.get("page_number", i + 1),
-                    "data": page.get("data", {}) if isinstance(page.get("data"), dict) else {}
+                    "data": (
+                        page.get("data", {})
+                        if isinstance(page.get("data"), dict)
+                        else {}
+                    ),
                 }
-                
+
                 formatted_results.append(formatted_result)
-            
+
             return formatted_results
         else:
             logger.error(f"Unexpected result format from LLM: {results}")

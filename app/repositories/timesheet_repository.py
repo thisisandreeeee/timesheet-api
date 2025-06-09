@@ -6,14 +6,16 @@ import aiosqlite
 from app.schemas.timesheet import TimesheetCreate, TimesheetUpdate
 
 
-async def get_timesheets_by_employee(conn: aiosqlite.Connection, employee_uuid: UUID) -> List[Dict]:
+async def get_timesheets_by_employee(
+    conn: aiosqlite.Connection, employee_uuid: UUID
+) -> List[Dict]:
     """
     Get all timesheets for an employee.
-    
+
     Args:
         conn: Database connection
         employee_uuid: Employee UUID
-        
+
     Returns:
         List of timesheet records
     """
@@ -25,7 +27,7 @@ async def get_timesheets_by_employee(conn: aiosqlite.Connection, employee_uuid: 
         WHERE employee_uuid = ?
         ORDER BY year DESC, month DESC
         """,
-        (str(employee_uuid),)
+        (str(employee_uuid),),
     ) as cursor:
         rows = await cursor.fetchall()
         return [dict(row) for row in rows]
@@ -36,13 +38,13 @@ async def get_timesheet(
 ) -> Optional[Dict]:
     """
     Get a specific timesheet.
-    
+
     Args:
         conn: Database connection
         employee_uuid: Employee UUID
         year: Year of the timesheet
         month: Month of the timesheet
-        
+
     Returns:
         Timesheet record or None if not found
     """
@@ -53,7 +55,7 @@ async def get_timesheet(
         FROM timesheets
         WHERE employee_uuid = ? AND year = ? AND month = ?
         """,
-        (str(employee_uuid), year, month)
+        (str(employee_uuid), year, month),
     ) as cursor:
         row = await cursor.fetchone()
         return dict(row) if row else None
@@ -64,12 +66,12 @@ async def create_timesheet(
 ) -> Dict:
     """
     Create a new timesheet.
-    
+
     Args:
         conn: Database connection
         employee_uuid: Employee UUID
         timesheet: Timesheet data
-        
+
     Returns:
         Created timesheet record
     """
@@ -88,10 +90,10 @@ async def create_timesheet(
             timesheet.total_ot_hours,
             timesheet.total_sundays_worked,
             timesheet.total_ot_hours_on_sundays,
-        )
+        ),
     )
     await conn.commit()
-    
+
     # Get the inserted record
     return await get_timesheet(conn, employee_uuid, timesheet.year, timesheet.month)
 
@@ -105,14 +107,14 @@ async def update_timesheet(
 ) -> Optional[Dict]:
     """
     Update a timesheet.
-    
+
     Args:
         conn: Database connection
         employee_uuid: Employee UUID
         year: Year of the timesheet
         month: Month of the timesheet
         timesheet: Updated timesheet data
-        
+
     Returns:
         Updated timesheet record or None if not found
     """
@@ -120,7 +122,7 @@ async def update_timesheet(
     current_timesheet = await get_timesheet(conn, employee_uuid, year, month)
     if not current_timesheet:
         return None
-    
+
     # Prepare update values
     updates = {}
     if timesheet.total_working_days is not None:
@@ -131,25 +133,25 @@ async def update_timesheet(
         updates["total_sundays_worked"] = timesheet.total_sundays_worked
     if timesheet.total_ot_hours_on_sundays is not None:
         updates["total_ot_hours_on_sundays"] = timesheet.total_ot_hours_on_sundays
-    
+
     if not updates:
         return current_timesheet
-    
+
     # Build update query
     set_clause = ", ".join(f"{key} = ?" for key in updates)
     values = list(updates.values())
     values.extend([str(employee_uuid), year, month])
-    
+
     await conn.execute(
         f"""
         UPDATE timesheets
         SET {set_clause}
         WHERE employee_uuid = ? AND year = ? AND month = ?
         """,
-        values
+        values,
     )
     await conn.commit()
-    
+
     # Return updated timesheet
     return await get_timesheet(conn, employee_uuid, year, month)
 
@@ -159,13 +161,13 @@ async def delete_timesheet(
 ) -> bool:
     """
     Delete a timesheet.
-    
+
     Args:
         conn: Database connection
         employee_uuid: Employee UUID
         year: Year of the timesheet
         month: Month of the timesheet
-        
+
     Returns:
         True if timesheet was deleted, False if not found
     """
@@ -174,8 +176,8 @@ async def delete_timesheet(
         DELETE FROM timesheets
         WHERE employee_uuid = ? AND year = ? AND month = ?
         """,
-        (str(employee_uuid), year, month)
+        (str(employee_uuid), year, month),
     )
     await conn.commit()
-    
-    return cursor.rowcount > 0 
+
+    return cursor.rowcount > 0

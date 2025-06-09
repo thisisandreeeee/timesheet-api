@@ -8,6 +8,7 @@ from fastapi import Depends
 DATABASE_URL = "sqlite:///./timesheet.db"
 DATABASE_FILE = "./timesheet.db"
 
+
 async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
     """
     Create and yield a database connection.
@@ -18,6 +19,7 @@ async def get_db() -> AsyncGenerator[aiosqlite.Connection, None]:
         yield conn
     finally:
         await conn.close()
+
 
 @asynccontextmanager
 async def lifespan(app):
@@ -37,7 +39,7 @@ async def lifespan(app):
             )
             """
         )
-        
+
         # Create Timesheet table
         await conn.execute(
             """
@@ -55,9 +57,9 @@ async def lifespan(app):
             )
             """
         )
-        
+
         await conn.commit()
-    
+
     yield
-    
-    # No cleanup needed for SQLite 
+
+    # No cleanup needed for SQLite
