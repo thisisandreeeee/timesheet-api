@@ -54,7 +54,7 @@ config_manager = LLMConfigManager()
 # Define configuration for OCR PDF route
 ocr_pdf_config = LLMConfig(
     provider=LLMProvider(os.getenv("OCR_LLM_PROVIDER", LLMProvider.GEMINI)),
-    model=os.getenv("OCR_LLM_MODEL", "gemini-2.0-flash"),
+    model=os.getenv("OCR_LLM_MODEL", "gemini-2.0-flash-lite"),
     temperature=0.0,
 )
 
