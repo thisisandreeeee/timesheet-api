@@ -1,20 +1,11 @@
-import io
-import json
 import logging
-from typing import List, Optional
+from typing import List
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile, status
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import ValidationError
 
-from app.schemas.pdf import (
-    PDFProcessErrorResponse,
-    PDFProcessLLMConfig,
-    PDFProcessResponse,
-)
-from app.services.pdf_service import PDFProcessingError, process_pdf
-from app.services.llm.config import config_manager
-from app.services.llm.client import LLMConfig
+from app.database import lifespan
+from app.routers import employee_routes, timesheet_routes, ocr_routes
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,6 +16,7 @@ app = FastAPI(
     title="Timesheet API",
     description="API for processing timesheet data",
     version="0.1.0",
+    lifespan=lifespan,
 )
 
 # Add CORS middleware
@@ -35,6 +27,10 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Include routers
+app.include_router(employee_routes.router)
+app.include_router(timesheet_routes.router)
 app.include_router(ocr_routes.router)
 
 
