@@ -40,14 +40,10 @@ async def test_process_pdf_success(test_client, mock_pdf_file):
         mock_process.return_value = [
             {
                 "page_number": 1,
-                "text": "Sample text from page 1",
-                "confidence": "high",
                 "data": {"title": "Sample Document", "date": "2023-01-01"},
             },
             {
                 "page_number": 2,
-                "text": "Sample text from page 2",
-                "confidence": "high",
                 "data": {"author": "John Doe", "pages": "2"},
             },
         ]
@@ -60,7 +56,6 @@ async def test_process_pdf_success(test_client, mock_pdf_file):
         response = test_client.post(
             "/ocr/pdf",
             files={"file": ("test.pdf", test_file, "application/pdf")},
-            data={"extract_keys": "title,date,author"},
         )
 
         # Check response
@@ -69,7 +64,6 @@ async def test_process_pdf_success(test_client, mock_pdf_file):
         assert "pages" in data
         assert len(data["pages"]) == 2
         assert data["pages"][0]["page_number"] == 1
-        assert data["pages"][0]["text"] == "Sample text from page 1"
         assert data["pages"][0]["data"]["title"] == "Sample Document"
         assert data["pages"][1]["page_number"] == 2
         assert data["pages"][1]["data"]["author"] == "John Doe"
@@ -89,8 +83,6 @@ async def test_process_pdf_with_llm_config(test_client, mock_pdf_file):
         mock_process.return_value = [
             {
                 "page_number": 1,
-                "text": "Sample text with custom LLM",
-                "confidence": "high",
                 "data": {"custom_field": "Custom value"},
             }
         ]
@@ -111,7 +103,6 @@ async def test_process_pdf_with_llm_config(test_client, mock_pdf_file):
             "/ocr/pdf",
             files={"file": ("test.pdf", test_file, "application/pdf")},
             data={
-                "extract_keys": "custom_field",
                 "llm_config_data": json.dumps(llm_config),
             },
         )
@@ -121,7 +112,6 @@ async def test_process_pdf_with_llm_config(test_client, mock_pdf_file):
         data = response.json()
         assert "pages" in data
         assert len(data["pages"]) == 1
-        assert data["pages"][0]["text"] == "Sample text with custom LLM"
         assert data["pages"][0]["data"]["custom_field"] == "Custom value"
 
 

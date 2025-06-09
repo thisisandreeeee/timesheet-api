@@ -72,14 +72,10 @@ async def test_process_pdf_success(mock_pdf_file):
         mock_ocr_result = [
             {
                 "page_number": 1,
-                "text": "Sample text from page 1",
-                "confidence": "high",
                 "data": {"title": "Sample Document", "date": "2023-01-01"},
             },
             {
                 "page_number": 2,
-                "text": "Sample text from page 2",
-                "confidence": "high",
                 "data": {"author": "John Doe", "pages": "2"},
             },
         ]
@@ -91,7 +87,6 @@ async def test_process_pdf_success(mock_pdf_file):
         # Verify the result
         assert len(result) == 2
         assert result[0]["page_number"] == 1
-        assert result[0]["text"] == "Sample text from page 1"
         assert result[0]["data"]["title"] == "Sample Document"
         assert result[1]["page_number"] == 2
         assert result[1]["data"]["author"] == "John Doe"

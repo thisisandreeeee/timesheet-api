@@ -108,8 +108,8 @@ class TestOCRService:
         mock_client.completion = AsyncMock(
             return_value={
                 "pages": [
-                    {"page_number": 1, "title": "Test Document", "date": "2023-01-01"},
-                    {"page_number": 2, "author": "John Doe", "signature": True},
+                    {"page_number": 1, "data": {"title": "Test Document", "date": "2023-01-01"}},
+                    {"page_number": 2, "data": {"author": "John Doe", "signature": True}},
                 ]
             }
         )
@@ -167,7 +167,5 @@ class TestOCRService:
         # Verify error results
         assert isinstance(results, list)
         assert len(results) == 1
-        assert results[0]["confidence"] == "low"
-        assert "Error processing document" in results[0]["text"]
         assert isinstance(results[0]["data"], dict)
         assert results[0]["data"] == {}

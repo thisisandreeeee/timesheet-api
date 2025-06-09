@@ -28,11 +28,6 @@ class OCRPageResult(BaseModel):
     """Schema for OCR result of a single page."""
 
     page_number: int = Field(..., description="Page number (1-based)")
-    text: str = Field(default="", description="Extracted text content")
-    confidence: str = Field(
-        default="medium",
-        description="OCR confidence level (e.g., 'high', 'medium', 'low')",
-    )
     data: OCRData = Field(default_factory=dict, description="Extracted structured data")
 
 
