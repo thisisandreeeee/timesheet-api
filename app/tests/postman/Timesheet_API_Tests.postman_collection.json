@@ -1,0 +1,816 @@
+{
+	"info": {
+		"_postman_id": "a8e5d7f9-c3b4-4b1c-9e2a-f5e4d2c3b1a0",
+		"name": "Timesheet API Tests",
+		"description": "Collection for testing the Timesheet API endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Check",
+			"item": [
+				{
+					"name": "Health Check",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has status field\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.status).to.eql(\"ok\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/health",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"health"
+							]
+						},
+						"description": "Verify the API is running correctly"
+					},
+					"response": []
+				},
+				{
+					"name": "Root Endpoint",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has message field\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.message).to.include(\"API is running\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								""
+							]
+						},
+						"description": "Check the root endpoint"
+					},
+					"response": []
+				}
+			],
+			"description": "Basic health check endpoints to verify API availability"
+		},
+		{
+			"name": "Employee Management",
+			"item": [
+				{
+					"name": "Create Employee",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Response has correct format\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('uuid');",
+									"    pm.expect(jsonData).to.have.property('staff_code');",
+									"    pm.expect(jsonData).to.have.property('name');",
+									"    ",
+									"    // Store the employee UUID for later tests",
+									"    pm.environment.set(\"employeeUuid\", jsonData.uuid);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"staff_code\": \"EMP-{{$randomInt}}\",\n    \"name\": \"Test Employee {{$randomInt}}\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/employees",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees"
+							]
+						},
+						"description": "Create a new employee with a random staff code and name"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Employee (Duplicate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 409 for duplicate staff code\", function () {",
+									"    pm.response.to.have.status(409);",
+									"});",
+									"",
+									"pm.test(\"Response has conflict error\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.detail).to.include(\"already exists\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// Get the same staff code that was just created",
+									"const staffCode = pm.environment.get(\"lastStaffCode\");",
+									"pm.variables.set(\"duplicateStaffCode\", staffCode);"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"staff_code\": \"{{duplicateStaffCode}}\",\n    \"name\": \"Another Employee\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/employees",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees"
+							]
+						},
+						"description": "Attempt to create an employee with a duplicate staff code"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Employee (Invalid)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 422 for invalid data\", function () {",
+									"    pm.response.to.have.status(422);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"staff_code\": \"\",\n    \"name\": \"Invalid Employee\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/employees",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees"
+							]
+						},
+						"description": "Attempt to create an employee with invalid data (empty staff code)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Employees",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is an array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/employees",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees"
+							]
+						},
+						"description": "Get a list of all employees"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Employee by UUID",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has correct employee data\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.uuid).to.eql(pm.environment.get(\"employeeUuid\"));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}"
+							]
+						},
+						"description": "Get details for a specific employee by UUID"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Employee (Not Found)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 404\", function () {",
+									"    pm.response.to.have.status(404);",
+									"});",
+									"",
+									"pm.test(\"Response has not found error\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.detail).to.include(\"not found\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/employees/00000000-0000-0000-0000-000000000000",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"00000000-0000-0000-0000-000000000000"
+							]
+						},
+						"description": "Attempt to get an employee with a non-existent UUID"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Employee",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has updated data\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.name).to.include(\"Updated\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Updated Employee Name\"\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}"
+							]
+						},
+						"description": "Update an employee's name"
+					},
+					"response": []
+				}
+			],
+			"description": "Test cases for employee management endpoints"
+		},
+		{
+			"name": "Timesheet Management",
+			"item": [
+				{
+					"name": "Create Timesheet",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 201\", function () {",
+									"    pm.response.to.have.status(201);",
+									"});",
+									"",
+									"pm.test(\"Response has correct format\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.have.property('id');",
+									"    pm.expect(jsonData).to.have.property('employee_uuid');",
+									"    pm.expect(jsonData).to.have.property('year');",
+									"    pm.expect(jsonData).to.have.property('month');",
+									"    ",
+									"    // Store the timesheet data for later tests",
+									"    pm.environment.set(\"timesheetId\", jsonData.id);",
+									"    pm.environment.set(\"timesheetYear\", jsonData.year);",
+									"    pm.environment.set(\"timesheetMonth\", jsonData.month);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"year\": 2025,\n    \"month\": 6,\n    \"total_working_days\": 22,\n    \"total_ot_hours\": 5.5,\n    \"total_sundays_worked\": 2,\n    \"total_ot_hours_on_sundays\": 1.0\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}/timesheets",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}",
+								"timesheets"
+							]
+						},
+						"description": "Create a new timesheet for the employee"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Timesheet (Duplicate)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 409 for duplicate timesheet\", function () {",
+									"    pm.response.to.have.status(409);",
+									"});",
+									"",
+									"pm.test(\"Response has conflict error\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.detail).to.include(\"already exists\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"year\": 2025,\n    \"month\": 6,\n    \"total_working_days\": 22,\n    \"total_ot_hours\": 5.5,\n    \"total_sundays_worked\": 2,\n    \"total_ot_hours_on_sundays\": 1.0\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}/timesheets",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}",
+								"timesheets"
+							]
+						},
+						"description": "Attempt to create a duplicate timesheet for the same month and year"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Timesheet (Invalid)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 422 for invalid data\", function () {",
+									"    pm.response.to.have.status(422);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"year\": 2025,\n    \"month\": 6,\n    \"total_working_days\": 2,\n    \"total_ot_hours\": 5.5,\n    \"total_sundays_worked\": 5,\n    \"total_ot_hours_on_sundays\": 1.0\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}/timesheets",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}",
+								"timesheets"
+							]
+						},
+						"description": "Attempt to create a timesheet with invalid data (more Sundays than working days)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Timesheets",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response is an array\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData).to.be.an('array');",
+									"    pm.expect(jsonData.length).to.be.at.least(1);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}/timesheets",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}",
+								"timesheets"
+							]
+						},
+						"description": "Get all timesheets for the employee"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Specific Timesheet",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has correct timesheet data\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.year).to.eql(parseInt(pm.environment.get(\"timesheetYear\")));",
+									"    pm.expect(jsonData.month).to.eql(parseInt(pm.environment.get(\"timesheetMonth\")));",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}/timesheets/{{timesheetYear}}/{{timesheetMonth}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}",
+								"timesheets",
+								"{{timesheetYear}}",
+								"{{timesheetMonth}}"
+							]
+						},
+						"description": "Get a specific timesheet by year and month"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Timesheet (Not Found)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 404\", function () {",
+									"    pm.response.to.have.status(404);",
+									"});",
+									"",
+									"pm.test(\"Response has not found error\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.detail).to.include(\"not found\");",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}/timesheets/2023/1",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}",
+								"timesheets",
+								"2023",
+								"1"
+							]
+						},
+						"description": "Attempt to get a non-existent timesheet"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Timesheet",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has updated data\", function () {",
+									"    var jsonData = pm.response.json();",
+									"    pm.expect(jsonData.total_working_days).to.eql(23);",
+									"    pm.expect(jsonData.total_ot_hours).to.eql(6.5);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"total_working_days\": 23,\n    \"total_ot_hours\": 6.5\n}"
+						},
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}/timesheets/{{timesheetYear}}/{{timesheetMonth}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}",
+								"timesheets",
+								"{{timesheetYear}}",
+								"{{timesheetMonth}}"
+							]
+						},
+						"description": "Update a timesheet's data"
+					},
+					"response": []
+				}
+			],
+			"description": "Test cases for timesheet management endpoints"
+		},
+		{
+			"name": "Cleanup",
+			"item": [
+				{
+					"name": "Delete Timesheet",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}/timesheets/{{timesheetYear}}/{{timesheetMonth}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}",
+								"timesheets",
+								"{{timesheetYear}}",
+								"{{timesheetMonth}}"
+							]
+						},
+						"description": "Delete the timesheet"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Employee",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 204\", function () {",
+									"    pm.response.to.have.status(204);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "DELETE",
+						"header": [],
+						"url": {
+							"raw": "{{baseUrl}}/employees/{{employeeUuid}}",
+							"host": [
+								"{{baseUrl}}"
+							],
+							"path": [
+								"employees",
+								"{{employeeUuid}}"
+							]
+						},
+						"description": "Delete the employee"
+					},
+					"response": []
+				}
+			],
+			"description": "Test cases for cleanup operations"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:8000",
+			"type": "string"
+		}
+	]
+} 
