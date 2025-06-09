@@ -25,17 +25,13 @@ class OCRService:
     async def process_document(
         self,
         pdf_pages: List[bytes],
-        extract_keys: Optional[List[str]] = None,
         route_path: Optional[str] = None,
-        custom_prompt: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """Process document PDF pages using LLM-based OCR.
         
         Args:
             pdf_pages: List of document page PDFs as bytes
-            extract_keys: Optional list of keys to extract from the document
             route_path: Optional API route path to get specific LLM config
-            custom_prompt: Optional custom prompt to use for the LLM
             
         Returns:
             List of dictionaries with OCR results for each page
@@ -45,7 +41,7 @@ class OCRService:
         logger.info(f"Using LLM config for route {route_path}: {llm_config}")
         
         # Create the messages for the LLM request
-        messages = self._create_pdf_messages(pdf_pages, custom_prompt, extract_keys)
+        messages = self._create_pdf_messages(pdf_pages)
         
         # Process all pages with the LLM
         try:
@@ -73,38 +69,38 @@ class OCRService:
     def _create_pdf_messages(
         self,
         pdf_pages: List[bytes],
-        custom_prompt: Optional[str] = None,
-        extract_keys: Optional[List[str]] = None,
     ) -> List[Dict[str, Any]]:
         """Create messages for PDF processing with the LLM.
         
         Args:
             pdf_pages: List of PDF page bytes to process
-            custom_prompt: Optional custom prompt to override the default
-            extract_keys: Optional list of keys to extract from the document
             
         Returns:
             List of message dictionaries to send to the LLM
         """
-        # Create prompts based on extraction needs
+        # Create prompts
         system_prompt = "You are an expert document processor specialized in extracting information from PDFs."
-        
-        # Build the user prompt
-        if extract_keys:
-            fields_prompt = ", ".join(extract_keys)
-            user_prompt = (
-                f"Please extract the following fields from the PDF document: {fields_prompt}.\n"
-                f"For each page, return a dictionary with 'page_number' and 'data' containing extracted fields.\n"
-                f"Return the result as a JSON object with 'pages' as the key, containing an array of page results.\n"
-                f"Example format: {{ 'pages': [{{ 'page_number': int, 'data': {{ 'field1': 'value1', ... }} }}, ...] }}"
-            )
-        else:
-            user_prompt = custom_prompt or (
-                f"Extract all relevant information from this PDF document.\n"
-                f"For each page, return a dictionary with 'page_number' and 'data' containing all extracted fields.\n"
-                f"Return the result as a JSON object with 'pages' as the key, containing an array of page results.\n"
-                f"Example format: {{ 'pages': [{{ 'page_number': int, 'data': {{ 'field1': 'value1', ... }} }}, ...] }}"
-            )
+
+        user_prompt = """You are an expert document processor specialized in extracting information from scanned copies of timesheets. Please extract the following fields from the PDF document:
+- name: string
+- staff_code: string
+- month: string
+- total_working_days: int
+- total_ot_hours: int
+- total_working_sundays: int
+- total_sunday_ot: int
+
+Some of the fields may be ambiguous due to human error. Ensure that the following rules are followed, and fix any deviations:
+- staff_code must follow the naming convention of `<letter>-<numbers>`
+- month must follow the naming convention of `%b-%Y`
+
+Information about each PDF:
+- Sundays/public holidays are highlighted. If the start/end or HR fields are updated for that date, that means the person worked on the day. If they are left blank, then the person did not work on that day. The supervisor's signature column indicates if the work on that date has been verified.
+
+For each page, return a dictionary with 'page_number' which is an auto incrementing field, 'explanation' which details the reasoning you have used to infer ambiguous fields, and 'data' which contains the extracted fields.
+
+Return the result as a JSON object with 'pages' as the key, containing an array of page results.
+{{ 'pages': [{{ 'page_number': int, 'data': {{ 'field1': 'value1', ... }} }}, ...] }}"""
         
         # Prepare PDF pages for the LLM
         pdf_contents = []

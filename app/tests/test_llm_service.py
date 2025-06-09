@@ -123,7 +123,6 @@ class TestOCRService:
         
         # Process a document
         pdf_pages = [b"pdf_page1", b"pdf_page2"]
-        extract_keys = ["title", "date", "author"]
         route_path = "/test/route"
         
         # Call the service
@@ -132,7 +131,6 @@ class TestOCRService:
             
             results = await service.process_document(
                 pdf_pages=pdf_pages,
-                extract_keys=extract_keys,
                 route_path=route_path
             )
         

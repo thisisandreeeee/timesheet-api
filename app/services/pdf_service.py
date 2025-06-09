@@ -113,7 +113,6 @@ async def process_pdf(file: BinaryIO, extract_keys: Optional[List[str]] = None, 
         # Process all pages with the OCR service
         return await default_ocr_service.process_document(
             pdf_pages=pdf_pages,
-            extract_keys=extract_keys,
             route_path=route_path
         )
     except PDFProcessingError:

@@ -82,7 +82,7 @@ async def test_process_pdf_success(mock_pdf_file):
         mock_ocr.return_value = mock_ocr_result
         
         # Call the function
-        result = await process_pdf(mock_pdf_file, ["title", "date", "author"])
+        result = await process_pdf(mock_pdf_file)
         
         # Verify the result
         assert len(result) == 2
@@ -97,7 +97,6 @@ async def test_process_pdf_success(mock_pdf_file):
         mock_split.assert_called_once_with(mock_pdf_file)
         mock_ocr.assert_called_once_with(
             pdf_pages=[b"page1", b"page2"],
-            extract_keys=["title", "date", "author"],
             route_path="/ocr/pdf"
         )
 
