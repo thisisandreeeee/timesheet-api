@@ -1,9 +1,12 @@
 # Timesheet API
 
-A minimal FastAPI application that provides PDF processing capabilities with OCR using LLMs.
+A FastAPI application that provides employee and timesheet management capabilities, as well as PDF processing with OCR.
 
 ## Features
 
+- Employee management (CRUD operations)
+- Timesheet management (CRUD operations)
+- Validation of timesheet data
 - Health check endpoint
 - PDF processing with OCR via LLM vision models
 - Structured data extraction from PDFs
@@ -65,13 +68,36 @@ uvicorn app.main:app --reload
 
 The API will be available at `http://127.0.0.1:8000`.
 
-Health check:
+### API Documentation
+
+Once the server is running, you can access the API documentation at:
+
+- Swagger UI: `http://127.0.0.1:8000/docs`
+- ReDoc: `http://127.0.0.1:8000/redoc`
+
+### Employee Endpoints
+
+- `GET /employees` - List all employees
+- `POST /employees` - Create a new employee
+- `GET /employees/{uuid}` - Get employee details
+- `PUT /employees/{uuid}` - Update employee details
+- `DELETE /employees/{uuid}` - Delete employee
+
+### Timesheet Endpoints
+
+- `GET /employees/{uuid}/timesheets` - List all timesheets for an employee
+- `GET /employees/{uuid}/timesheets/{year}/{month}` - Get specific timesheet
+- `POST /employees/{uuid}/timesheets` - Create a new timesheet
+- `PUT /employees/{uuid}/timesheets/{year}/{month}` - Update timesheet
+- `DELETE /employees/{uuid}/timesheets/{year}/{month}` - Delete timesheet
+
+### Health Check
 
 ```bash
 curl http://127.0.0.1:8000/health
 ```
 
-Run tests:
+### Running Tests
 
 ```bash
 pytest
