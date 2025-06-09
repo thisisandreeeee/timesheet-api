@@ -90,7 +90,6 @@ def split_pdf(file: BinaryIO) -> List[bytes]:
 
 async def process_pdf(
     file: BinaryIO,
-    extract_keys: Optional[List[str]] = None,
     route_path: str = "/ocr/pdf",
 ) -> List[Dict[str, Any]]:
     """
@@ -98,7 +97,6 @@ async def process_pdf(
 
     Args:
         file: The PDF file to process
-        extract_keys: Optional list of keys to extract from the document
         route_path: API route path for LLM configuration
 
     Returns:
