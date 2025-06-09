@@ -56,16 +56,20 @@ async def health_check():
 )
 async def process_pdf_route(
     file: UploadFile = File(..., description="PDF file to process"),
-    extract_keys: Optional[str] = Form(None, description="Comma-separated list of keys to extract"),
-    llm_config_data: Optional[str] = Form(None, description="LLM configuration in JSON format"),
+    extract_keys: Optional[str] = Form(
+        None, description="Comma-separated list of keys to extract"
+    ),
+    llm_config_data: Optional[str] = Form(
+        None, description="LLM configuration in JSON format"
+    ),
 ):
     """
     Process a PDF file and extract structured data.
-    
+
     - **file**: PDF file to upload
     - **extract_keys**: Optional comma-separated list of keys to extract from the document
     - **llm_config_data**: Optional LLM configuration in JSON format
-    
+
     Returns a JSON response with OCR results for each page.
     """
     # Validate file content type
@@ -74,14 +78,14 @@ async def process_pdf_route(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="File must be a PDF",
         )
-    
+
     route_path = "/ocr/pdf"
-    
+
     # Parse extract_keys
     extract_keys_list = None
     if extract_keys:
         extract_keys_list = [k.strip() for k in extract_keys.split(",") if k.strip()]
-    
+
     # Handle LLM config if provided
     if llm_config_data:
         try:
@@ -98,22 +102,22 @@ async def process_pdf_route(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid LLM configuration: {str(e)}",
             )
-    
+
     try:
         # Read file into memory
         file_bytes = await file.read()
         file_obj = io.BytesIO(file_bytes)
-        
+
         # Process the PDF
         results = await process_pdf(
             file=file_obj,
             extract_keys=extract_keys_list,
             route_path=route_path,
         )
-        
+
         # Return results
         return PDFProcessResponse(pages=results)
-    
+
     except PDFProcessingError as e:
         logger.error(f"PDF processing error: {str(e)}")
         raise HTTPException(
@@ -136,6 +140,7 @@ async def process_pdf_route(
             detail=f"Internal server error: {str(e)}",
         )
 
+
 @app.get("/")
 async def root():
     """
@@ -147,4 +152,4 @@ async def root():
 if __name__ == "__main__":
     import uvicorn
 
-    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True) 
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

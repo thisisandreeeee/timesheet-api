@@ -42,27 +42,27 @@ async def test_process_pdf_success(test_client, mock_pdf_file):
                 "page_number": 1,
                 "text": "Sample text from page 1",
                 "confidence": "high",
-                "data": {"title": "Sample Document", "date": "2023-01-01"}
+                "data": {"title": "Sample Document", "date": "2023-01-01"},
             },
             {
                 "page_number": 2,
                 "text": "Sample text from page 2",
                 "confidence": "high",
-                "data": {"author": "John Doe", "pages": "2"}
-            }
+                "data": {"author": "John Doe", "pages": "2"},
+            },
         ]
-        
+
         # Create the file for upload
         test_file = io.BytesIO(mock_pdf_file)
         test_file.name = "test.pdf"
-        
+
         # Make the request
         response = test_client.post(
             "/ocr/pdf",
             files={"file": ("test.pdf", test_file, "application/pdf")},
-            data={"extract_keys": "title,date,author"}
+            data={"extract_keys": "title,date,author"},
         )
-        
+
         # Check response
         assert response.status_code == 200
         data = response.json()
@@ -79,41 +79,43 @@ async def test_process_pdf_success(test_client, mock_pdf_file):
 async def test_process_pdf_with_llm_config(test_client, mock_pdf_file):
     """Test PDF processing with custom LLM configuration."""
     # Mock the process_pdf function
-    with patch("app.main.process_pdf") as mock_process, \
-         patch("app.main.config_manager.get_config") as mock_get_config, \
-         patch("app.main.config_manager.register_route_config") as mock_register_config:
-        
+    with (
+        patch("app.main.process_pdf") as mock_process,
+        patch("app.main.config_manager.get_config") as mock_get_config,
+        patch("app.main.config_manager.register_route_config") as mock_register_config,
+    ):
+
         # Configure the mock to return sample results
         mock_process.return_value = [
             {
                 "page_number": 1,
                 "text": "Sample text with custom LLM",
                 "confidence": "high",
-                "data": {"custom_field": "Custom value"}
+                "data": {"custom_field": "Custom value"},
             }
         ]
-        
+
         # Create the file for upload
         test_file = io.BytesIO(mock_pdf_file)
         test_file.name = "test.pdf"
-        
+
         # Create custom LLM config
         llm_config = {
             "provider": "anthropic",
             "model": "claude-3-opus-20240229",
-            "temperature": 0.2
+            "temperature": 0.2,
         }
-        
+
         # Make the request with custom LLM config
         response = test_client.post(
             "/ocr/pdf",
             files={"file": ("test.pdf", test_file, "application/pdf")},
             data={
                 "extract_keys": "custom_field",
-                "llm_config_data": json.dumps(llm_config)
-            }
+                "llm_config_data": json.dumps(llm_config),
+            },
         )
-        
+
         # Check response
         assert response.status_code == 200
         data = response.json()
@@ -129,13 +131,12 @@ async def test_process_pdf_invalid_file_type(test_client):
     # Create a non-PDF file
     test_file = io.BytesIO(b"This is not a PDF")
     test_file.name = "test.txt"
-    
+
     # Make the request
     response = test_client.post(
-        "/ocr/pdf",
-        files={"file": ("test.txt", test_file, "text/plain")}
+        "/ocr/pdf", files={"file": ("test.txt", test_file, "text/plain")}
     )
-    
+
     # Check response
     assert response.status_code == 400
     assert "detail" in response.json()
@@ -150,13 +151,12 @@ async def test_process_pdf_processing_error(test_client, mock_pdf_file):
         # Create the file for upload
         test_file = io.BytesIO(mock_pdf_file)
         test_file.name = "test.pdf"
-        
+
         # Make the request
         response = test_client.post(
-            "/ocr/pdf",
-            files={"file": ("test.pdf", test_file, "application/pdf")}
+            "/ocr/pdf", files={"file": ("test.pdf", test_file, "application/pdf")}
         )
-        
+
         # Check response
         assert response.status_code == 400
         assert "detail" in response.json()
@@ -169,14 +169,14 @@ async def test_process_pdf_invalid_llm_config(test_client, mock_pdf_file):
     # Create the file for upload
     test_file = io.BytesIO(mock_pdf_file)
     test_file.name = "test.pdf"
-    
+
     # Make the request with invalid LLM config
     response = test_client.post(
         "/ocr/pdf",
         files={"file": ("test.pdf", test_file, "application/pdf")},
-        data={"llm_config_data": "this is not valid json"}
+        data={"llm_config_data": "this is not valid json"},
     )
-    
+
     # Check response
     assert response.status_code == 400
     assert "detail" in response.json()
