@@ -23,7 +23,7 @@
 
 3. **Update Employee Details**  
    - **As a** manager  
-   - **I want to** edit an employee’s name or staff code  
+   - **I want to** edit an employee's name or staff code  
    - **So that** records stay accurate if details change  
 
 4. **Delete Employee**  
@@ -34,7 +34,7 @@
 5. **Create Monthly Timesheet**  
    - **As a** manager  
    - **I want to** submit a JSON payload with year, month, and totals for a given employee  
-   - **So that** I capture that month’s work summary  
+   - **So that** I capture that month's work summary  
 
 6. **Prevent Duplicates**  
    - **As a** manager  
@@ -43,7 +43,7 @@
 
 7. **View & Update Timesheet**  
    - **As a** manager  
-   - **I want to** retrieve or update a specific month’s timesheet  
+   - **I want to** retrieve or update a specific month's timesheet  
    - **So that** I can correct errors or verify details  
 
 8. **Delete Timesheet**  
@@ -138,7 +138,7 @@
 | Method | Path                                                      | Description                  |
 |--------|-----------------------------------------------------------|------------------------------|
 | GET    | `/employees/{uuid}/timesheets`                            | List all timesheets         |
-| GET    | `/employees/{uuid}/timesheets/{year}/{month}`             | Get one month’s timesheet   |
+| GET    | `/employees/{uuid}/timesheets/{year}/{month}`             | Get one month's timesheet   |
 | POST   | `/employees/{uuid}/timesheets`                            | Create timesheet            |
 | PUT    | `/employees/{uuid}/timesheets/{year}/{month}`             | Update timesheet            |
 | DELETE | `/employees/{uuid}/timesheets/{year}/{month}`             | Delete timesheet            |
@@ -168,3 +168,58 @@
 - **Logging:** record errors and key request/response data  
 
 ---
+
+## 9. Implementation Architecture
+
+```mermaid
+flowchart TD
+    Client[Client] --> API[FastAPI App]
+    
+    subgraph API["API Layer (FastAPI)"]
+        main[main.py] --> employee_router[employee_routes.py]
+        main --> timesheet_router[timesheet_routes.py]
+        main --> ocr_router[ocr_routes.py]
+    end
+    
+    subgraph Services["Service Layer"]
+        employee_service[employee_service.py]
+        timesheet_service[timesheet_service.py]
+        pdf_service[pdf_service.py]
+    end
+    
+    subgraph Repositories["Repository Layer"]
+        employee_repo[employee_repository.py]
+        timesheet_repo[timesheet_repository.py]
+    end
+    
+    subgraph Schemas["Schema Layer (Pydantic)"]
+        employee_schema[employee.py]
+        timesheet_schema[timesheet.py]
+        error_schema[errors.py]
+        pdf_schema[pdf.py]
+    end
+    
+    subgraph Database["Database Layer"]
+        db[database.py] --> sqlite[(SQLite DB)]
+    end
+    
+    employee_router --> employee_service
+    timesheet_router --> timesheet_service
+    ocr_router --> pdf_service
+    
+    employee_service --> employee_repo
+    timesheet_service --> timesheet_repo
+    timesheet_service --> employee_service
+    
+    employee_repo --> db
+    timesheet_repo --> db
+    
+    employee_router --> employee_schema
+    timesheet_router --> timesheet_schema
+    employee_service --> employee_schema
+    timesheet_service --> timesheet_schema
+    ocr_router --> pdf_schema
+    
+    employee_router --> error_schema
+    timesheet_router --> error_schema
+    ocr_router --> error_schema
